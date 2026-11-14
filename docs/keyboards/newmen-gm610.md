@@ -13,6 +13,33 @@ Everything here was checked on that unit only. See [Untested and broken](#untest
 - Battery sleep: inactivity timer set in the editor, key wake
 - USB: `12c9:6001`, the stock ID, so one `sinowisp` command flashes either firmware
 
+## What SMK adds over the stock firmware
+
+Compared with the stock firmware as it shipped on the author's unit:
+
+- **Live keymap editor.** Remap any key on 4 layers from a web page, with no reflashing and no vendor software. Changes
+  are saved on the keyboard. Keys can be found by keycode (hex or decimal), name or category.
+- **Per-key colours, per layer.** Pick any RGB colour for each key, separately on every layer, with a colour square,
+  RGB sliders and a hex box. Keys can follow the effect ("Auto") instead. The solid colour is any RGB too.
+- **Layer highlight.** While a layer is held, its keys light in a colour of your choice and keys the layer doesn't use
+  go dark, so you can see what you're pressing.
+- **Layer stacking.** Holding one momentary layer and pressing another stacks them, and a key resolves from the highest
+  layer that defines it. A release acts on the key that was pressed, so a key can't stick when a layer changes under it.
+- **Key tester in the editor.** Each press lights up on the page as the firmware sees it, labelled for the layer in use.
+- **Configurable sleep timer.** Idle time before Bluetooth sleep is set from the editor, from 1 minute up to 120 on the
+  slider (or Never), and applies at once.
+- **Failsafe.** Hold Esc, or S+M+K, while plugging the keyboard in to drop into the stock bootloader and reflash, even
+  when the firmware is broken. A custom combo can be added in the editor. The stock bootloader has no key combo of its own.
+- **Keymap kept across flashes.** [`tools/keep-settings.py`](../../tools/keep-settings.py) carries the saved keymap
+  and colours over a reflash, which otherwise wipes them.
+- **Connection status on the keys.** Switching mode flashes the active mode on the Tab or Q/W/E/R key, and blinks it
+  while pairing. The chosen mode is remembered.
+- **Open and testable.** Builds from source with SDCC and meson, and the USB stack and the editor protocol are covered by
+  simulator tests.
+
+Not carried over from the stock firmware: its battery level and charging indicators. Its own lighting effects and Fn
+combos were not catalogued, so SMK's effects (from the Air60 firmware) and Fn layer are a different set.
+
 ## SMK Supported Features
 
 - [x] Key Scan
