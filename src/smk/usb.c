@@ -11,6 +11,9 @@
 #include "console.h"
 #include "keyboard.h"
 #include "delay.h"
+#ifdef DYNAMIC_KEYMAP_ENABLE
+#    include "config_protocol.h"
+#endif
 #include <stdint.h>
 #include <string.h>
 
@@ -57,6 +60,7 @@ typedef enum {
     EP0_OUT_LED,
     EP0_OUT_ISP,
     EP0_OUT_CONSOLE,
+    EP0_OUT_CONFIG,
 } ep0_out_target_t;
 
 const uint8_t hid_report_desc_keyboard[] = {
@@ -192,6 +196,21 @@ const uint8_t hid_report_desc_extra[] = {
         HID_RI_INPUT(8, HID_IOF_DATA | HID_IOF_VARIABLE | HID_IOF_ABSOLUTE),
     HID_RI_END_COLLECTION(0),
 #endif // NKRO_ENABLE
+
+#ifdef DYNAMIC_KEYMAP_ENABLE
+    // Last, so the collections before it (ISP included) keep their positions.
+    HID_RI_USAGE_PAGE(16, 0xff00),        // Vendor
+    HID_RI_USAGE(8, 0x62),                // Keymap configuration
+    HID_RI_COLLECTION(8, 0x01),           // Application
+        HID_RI_REPORT_ID(8, REPORT_ID_CONFIG),
+        HID_RI_USAGE(8, 0x01),
+        HID_RI_LOGICAL_MINIMUM(8, 0x00),
+        HID_RI_LOGICAL_MAXIMUM(16, 0x00ff),
+        HID_RI_REPORT_SIZE(8, 8),
+        HID_RI_REPORT_COUNT(8, CONFIG_PAYLOAD_SIZE),
+        HID_RI_FEATURE(8, HID_IOF_DATA | HID_IOF_VARIABLE | HID_IOF_ABSOLUTE),
+    HID_RI_END_COLLECTION(0),
+#endif // DYNAMIC_KEYMAP_ENABLE
 
     // clang-format on
 };
@@ -344,6 +363,9 @@ static void usb_get_interface_handler(struct usb_req_setup *req);
 static void usb_set_interface_handler(struct usb_req_setup *req);
 static void usb_get_descriptor_handler(struct usb_req_setup *req);
 static void usb_hid_set_report_handler(struct usb_req_setup *req);
+#ifdef DYNAMIC_KEYMAP_ENABLE
+static void usb_hid_get_report_handler(struct usb_req_setup *req);
+#endif
 
 /**
  * 0.5KB of general purpose scratch RAM.
@@ -624,6 +646,14 @@ static void usb_ep0_out_irq(void)
                 break;
 #endif
 
+#ifdef DYNAMIC_KEYMAP_ENABLE
+            case EP0_OUT_CONFIG:
+                if (EP0_OUT_BUF[0] == REPORT_ID_CONFIG) {
+                    config_receive(&EP0_OUT_BUF[1]);
+                }
+                break;
+#endif
+
             default:
                 break;
         }
@@ -825,6 +855,15 @@ static void usb_hid_request(struct usb_req_setup *req)
                 return;
             }
             break;
+
+#ifdef DYNAMIC_KEYMAP_ENABLE
+        case USB_HID_REQ_GET_REPORT:
+            if (in) {
+                usb_hid_get_report_handler(req);
+                return;
+            }
+            break;
+#endif
 
         case USB_HID_REQ_SET_IDLE:
             if (!in) {
@@ -1166,7 +1205,31 @@ static void usb_hid_set_report_handler(struct usb_req_setup *req)
             return;
         }
 #endif
+#ifdef DYNAMIC_KEYMAP_ENABLE
+        if (report_id == REPORT_ID_CONFIG && req->wLength == 1u + CONFIG_PAYLOAD_SIZE) {
+            ep0_receive(EP0_OUT_CONFIG, req->wLength);
+            return;
+        }
+#endif
     }
 
     ep0_stall();
 }
+
+#ifdef DYNAMIC_KEYMAP_ENABLE
+static void usb_hid_get_report_handler(struct usb_req_setup *req)
+{
+    uint8_t report_type = req->wValue >> 8;
+    uint8_t report_id   = req->wValue & 0xff;
+    uint8_t iface       = req->wIndex & 0xff;
+
+    if (report_type == REPORT_TYPE_FEATURE && iface == 1 && report_id == REPORT_ID_CONFIG) {
+        scratch[0] = REPORT_ID_CONFIG;
+        config_read_response(&scratch[1]);
+        ep0_send(scratch, 1u + CONFIG_PAYLOAD_SIZE, req->wLength);
+        return;
+    }
+
+    ep0_stall();
+}
+#endif

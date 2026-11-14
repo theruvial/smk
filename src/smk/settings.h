@@ -13,6 +13,7 @@ typedef struct {
     uint8_t ul_speed;
     uint8_t battery_indicator_on;
     uint8_t rf_link;
+    uint8_t conn_mode; // boards without a USB/RF slider: key-selected mode (1 = USB, 0 = RF)
 } user_settings_t;
 
 extern user_settings_t user_settings;

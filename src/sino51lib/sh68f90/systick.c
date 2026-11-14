@@ -3,7 +3,12 @@
 #include "tick.h"
 #include <stdint.h>
 
-#define RELOAD_LED_SUBFRAME 0xFCDF // 65536 - 801, 400 us
+// A board can shorten the LED subframe (option led_subframe_us) for a higher refresh.
+#ifdef LED_SUBFRAME_US
+#    define RELOAD_LED_SUBFRAME (uint16_t)(65536UL - (2UL * (LED_SUBFRAME_US)) - 1UL) // 2 counts per us
+#else
+#    define RELOAD_LED_SUBFRAME 0xFCDF // 65536 - 801, 400 us
+#endif
 #define RELOAD_MATRIX_SCAN  0xFF37 // 65536 - 201, ~100 us against a ~320 us sweep
 
 static void timer2_reload(uint16_t reload)

@@ -166,15 +166,30 @@ foreach keyboard, board : keyboards
         '-DFREQ_SYS=@0@'.format(spec['freq_sys']),
     ]
 
+    # A runtime-editable keymap gets its own store right below the settings sector.
+    dyn_layers = options.get('dynamic_keymap_layers', '')
+
     if spec['settings_store'] == 'flash'
         settings_addr = marker_addr - spec['sector_size']
+        code_end = settings_addr
         platform_cc_args += [
-            '--code-size',
-            '@0@'.format(settings_addr),
             '-DFLASH_CFG_ADDR=@0@u'.format(settings_addr),
             '-DFLASH_CFG_SIZE=@0@u'.format(spec['sector_size']),
             '-DFLASH_MARKER_ADDR=@0@u'.format(marker_addr),
         ]
+        if dyn_layers != ''
+            keymap_store_size = 2 * spec['sector_size']
+            code_end = settings_addr - keymap_store_size
+            platform_cc_args += [
+                '-DDYNAMIC_KEYMAP_ENABLE=1',
+                '-DDYNAMIC_KEYMAP_LAYERS=@0@'.format(dyn_layers),
+                '-DFLASH_KEYMAP_ADDR=@0@u'.format(code_end),
+                '-DFLASH_KEYMAP_SIZE=@0@u'.format(keymap_store_size),
+            ]
+        endif
+        platform_cc_args += ['--code-size', '@0@'.format(code_end)]
+    elif dyn_layers != ''
+        error('dynamic_keymap_layers needs a flash settings store (keyboard @0@)'.format(keyboard))
     else
         # settings live outside the program flash, so code may run up to the marker sector
         platform_cc_args += ['--code-size', '@0@'.format(marker_addr)]
@@ -360,6 +375,9 @@ foreach keyboard, board : keyboards
         endif
 
         src_main += board['src'] + variant['src']
+        if dyn_layers != ''
+            src_main += files('src/smk/dynamic_keymap.c', 'src/smk/config_protocol.c')
+        endif
         inc_dirs += [board['dir'], variant['dir']]
 
         prefix = '@0@_@1@_'.format(keyboard, layout)
@@ -368,6 +386,9 @@ foreach keyboard, board : keyboards
         # a header with the matrix sizes (for the board's _Static_assert) and a source
         # file with the tables + user_led_* accessors the shared effect engine calls.
         geom_src = []
+        if options.has_key('led_subframe_us')
+            cc_args += '-DLED_SUBFRAME_US=@0@'.format(options['led_subframe_us'])
+        endif
         if options.has_key('led_cols')
             configure_file(
                 output : prefix + 'led_geometry.h',

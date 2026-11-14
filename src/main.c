@@ -17,6 +17,10 @@
 #include "tick.h"
 #include "sleep.h"
 #include "diag.h"
+#ifdef DYNAMIC_KEYMAP_ENABLE
+#    include "dynamic_keymap.h"
+#    include "config_protocol.h"
+#endif
 #ifdef DEBUG_SINK_UART
 #    include "uart.h"
 #endif
@@ -35,6 +39,9 @@ void init(void)
 
     user_init();
 
+#ifdef DYNAMIC_KEYMAP_ENABLE
+    dynamic_keymap_init(); // before the first scan can look a key up
+#endif
     matrix_init();
     keyboard_init();
     usb_init();
@@ -103,6 +110,9 @@ void main(void)
 
         usb_task();
         settings_task();
+#ifdef DYNAMIC_KEYMAP_ENABLE
+        config_task();
+#endif
         sleep_task();
 
 #if DEBUG == 1
