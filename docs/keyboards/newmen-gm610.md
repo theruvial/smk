@@ -1,5 +1,8 @@
 # Newmen GM610
 
+Developed and tested on one unit of the [Newmen GM610 wireless mechanical keyboard](https://www.amazon.com/dp/B08QV9D8WN) (PCB `K948 US BYK916 V1.1`).
+Everything here was checked on that unit only. See [Untested and broken](#untested-and-broken) before relying on it.
+
 ## Specs
 
 - MCU: [SH68F90A](../platforms/sh68f90.md), marked `BYK916` (PCB `K948 US BYK916 V1.1`, LQFP-64)
@@ -20,6 +23,35 @@
 - [x] Battery sleep (Bluetooth mode, wakes on a key)
 - [x] Failsafe: hold Esc, or S+M+K, while plugging in (a custom combo can be set in the editor)
 - [ ] 2.4 GHz (untested, no dongle)
+
+## Untested and broken
+
+Verified on the author's unit: typing on all 61 keys, the Fn layer, per-key RGB and the editor (Chrome, Windows),
+Bluetooth pairing and typing with one Windows laptop, the failsafe, and Bluetooth sleep with key wake.
+
+**Broken on the author's unit (hardware, not firmware):**
+
+- The green channel of the Tab and Caps rows (P6.2 and P6.3, chip pins 3 and 4) lights nothing, most likely a lifted or
+  bridged pin from probing. Those two rows can't make green, so their colours are off. Other units are likely fine.
+
+**Not implemented:**
+
+- Battery level and charging indicators. The battery state is not read, and the indicator setting is left off.
+- The sixth LED row the stock firmware drives (P4.0, P4.1, P6.0). No LEDs hang off it on this board.
+
+**Untested:**
+
+- 2.4 GHz (`Fn`+`R`). The code is there, but there is no dongle to test it with.
+- Bluetooth beyond one Windows laptop: the other two slots, other operating systems, phones, and reconnecting after long sleeps.
+- Wired sleep, where the keyboard sleeps when the PC suspends the USB bus, and waking the PC with a key.
+- How the wake works. The sleep sequence copies the stock firmware's, and a key wakes it. Which pin INT4 listens on was
+  never confirmed.
+- Battery life. Nothing here measured the current drawn asleep or awake.
+- The editor outside Chrome on Windows. It uses WebHID, so it needs a Chromium browser (Chrome or Edge); Firefox and Safari don't have it.
+- Other units. The stock firmware revision can differ, the code options were never read (they need an ICP programmer),
+  and an ISO or other variant of the board wasn't looked at.
+- The Air60 and the other boards still build and pass the simulator suites, but none of them were flashed after the
+  keymap, protocol, layer-stacking, or settings changes in this branch.
 
 ## Fn layer
 

@@ -24,6 +24,7 @@ SMK ships [its own ISP bootloader](docs/bootloader.md), which takes that failure
 | E-YOOSO Z11 | SH68F90A / BYK901 | N/A | | [Details](docs/keyboards/eyooso-z11.md) |
 | Genesis Thor 300 | SH68F881 / BYK801 | N/A | | [Details](docs/keyboards/genesis-thor-300.md) |
 | CIY X77 | SH68F89 / BYK816 | N/A | External 24Cxx EEPROM | [Details](docs/keyboards/ciy-x77.md) |
+| [Newmen GM610](https://www.amazon.com/dp/B08QV9D8WN) | SH68F90A / BYK916 | BT (BK3632) | Per-key RGB, live keymap editor, battery sleep. Partly untested, see Details | [Details](docs/keyboards/newmen-gm610.md) |
 
 ## Programming Tools
 
