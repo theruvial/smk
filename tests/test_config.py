@@ -234,6 +234,20 @@ class TestConfigCommands(unittest.TestCase):
         self.assertEqual(solid[:6], [0x11, 20, OK, 1, 2, 3], s.output)
         self.assertEqual(layer[:7], [0x0B, 22, OK, 1, 7, 8, 9], s.output)
 
+    def test_sleep_timer_round_trip(self):
+        # 0 = never, 240 = the maximum; 241 is rejected and leaves the value alone
+        s = (Session()
+             .command(0x14, 24, 17).get()
+             .command(0x13, 25).get()
+             .command(0x14, 26, 241).get()
+             .command(0x13, 27).get()
+             .finish())
+        r = s.responses()
+        self.assertEqual(r[-4][:3], [0x14, 24, OK], s.output)
+        self.assertEqual(r[-3][:4], [0x13, 25, OK, 17], s.output)
+        self.assertEqual(r[-2][:3], [0x14, 26, ERR_RANGE], s.output)
+        self.assertEqual(r[-1][:4], [0x13, 27, OK, 17], s.output)
+
     def test_base_layer_has_no_highlight(self):
         s = Session().command(0x0B, 23, 0).get().finish()
         self.assertEqual(s.responses()[-1][:3], [0x0B, 23, ERR_RANGE], s.output)

@@ -9,6 +9,8 @@ typedef int sleep_disabled_placeholder_t;
 #    include "power.h"
 #    include "usb.h"
 #    include "user_sleep.h"
+#    include "settings.h"
+#    include "kbdef.h"
 #    ifdef RF_ENABLED
 #        include "rf_controller.h"
 #        include "keyboard.h"
@@ -18,13 +20,19 @@ typedef int sleep_disabled_placeholder_t;
 #    include <stdbool.h>
 #    include <stdint.h>
 
-#    define SLEEP_TIMEOUT 21000
+#    ifndef SLEEP_FRAMES_PER_SEC
+// Boards that don't report their LED frame rate keep a fixed frame-count timeout.
+#        define SLEEP_TIMEOUT 21000
+#    endif
 
 // `inactivity` is owned by sleep_note_frame(); the main loop only ever reads it
 // indirectly via `sleep_requested`. Activity reaches the tick through the
 // single-byte `activity_seen` flag, so there is no read-modify-write race on the
 // 16-bit counter across contexts.
-static volatile uint16_t inactivity;
+static volatile uint16_t inactivity; // frames, or seconds when SLEEP_FRAMES_PER_SEC is defined
+#    ifdef SLEEP_FRAMES_PER_SEC
+static uint16_t frame_ctr; // frames into the current second (tick ISR only, like inactivity)
+#    endif
 static volatile uint8_t  activity_seen;
 static volatile uint8_t  sleep_requested;
 
@@ -33,6 +41,9 @@ void sleep_init(void)
     inactivity      = 0;
     activity_seen   = 0;
     sleep_requested = 0;
+#    ifdef SLEEP_FRAMES_PER_SEC
+    frame_ctr       = 0;
+#    endif
 }
 
 void sleep_note_frame(bool frame_completed)
@@ -45,14 +56,34 @@ void sleep_note_frame(bool frame_completed)
         activity_seen   = 0;
         inactivity      = 0;
         sleep_requested = 0;
+#    ifdef SLEEP_FRAMES_PER_SEC
+        frame_ctr = 0;
+#    endif
         return;
     }
 
+#    ifdef SLEEP_FRAMES_PER_SEC
+    // the limit is read every second, so changing it from the editor applies at once
+    const uint16_t limit = (uint16_t)user_settings.sleep_min * 60u;
+    if (limit == 0) { // never sleep
+        return;
+    }
+    if (++frame_ctr >= SLEEP_FRAMES_PER_SEC) {
+        frame_ctr = 0;
+        if (inactivity < 0xFFFFu) {
+            inactivity++;
+        }
+        if (inactivity >= limit) {
+            sleep_requested = 1;
+        }
+    }
+#    else
     if (inactivity < SLEEP_TIMEOUT) {
         if (++inactivity >= SLEEP_TIMEOUT) {
             sleep_requested = 1;
         }
     }
+#    endif
 }
 
 void sleep_note_activity(void)

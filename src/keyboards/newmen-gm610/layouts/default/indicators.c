@@ -86,6 +86,7 @@ void indicators_apply_defaults()
         }
     }
     user_settings.layer_hl = LAYER_HL_DEFAULT;
+    user_settings.sleep_min = 5; // minutes idle before Bluetooth sleep, 0 = never
 }
 
 void indicators_validate_settings()

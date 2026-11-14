@@ -15,6 +15,7 @@
 
 #define CONFIG_PAYLOAD_SIZE 7u
 #define CONFIG_PROTOCOL_VER 1u
+#define CONFIG_SLEEP_MAX_MIN 240u
 
 enum config_cmd {
     CONFIG_CMD_GET_INFO     = 0x01, // -> ver, rows, cols, layers
@@ -35,6 +36,8 @@ enum config_cmd {
     CONFIG_CMD_SET_KEY_AUTO    = 0x10, // layer,row,col: key back to auto (persist with CONFIG_CMD_SAVE)
     CONFIG_CMD_GET_SOLID_RGB   = 0x11, // -> r, g, b of the solid effect
     CONFIG_CMD_SET_SOLID_RGB   = 0x12, // r, g, b: applied live, saved
+    CONFIG_CMD_GET_SLEEP       = 0x13, // -> minutes idle before sleep (0 = never)
+    CONFIG_CMD_SET_SLEEP       = 0x14, // minutes (0 = never, max CONFIG_SLEEP_MAX_MIN): applied live, saved
 };
 
 enum config_status {

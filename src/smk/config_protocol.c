@@ -242,6 +242,18 @@ static uint8_t run(__xdata uint8_t *req, uint8_t *out)
             settings_mark_dirty();
             return CONFIG_OK;
 
+        case CONFIG_CMD_GET_SLEEP:
+            out[0] = user_settings.sleep_min;
+            return CONFIG_OK;
+
+        case CONFIG_CMD_SET_SLEEP:
+            if (req[2] > CONFIG_SLEEP_MAX_MIN) {
+                return CONFIG_ERR_RANGE;
+            }
+            user_settings.sleep_min = req[2];
+            settings_mark_dirty();
+            return CONFIG_OK;
+
         case CONFIG_CMD_RESET_COLORS:
             settings_save_pre();
             dynamic_keymap_reset_colors();

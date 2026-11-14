@@ -128,6 +128,7 @@ code { background: var(--key); padding: 1px 5px; border-radius: 4px; }
   <div id="lighting-view" hidden>
     <div class="panel" id="key-colour"></div>
     <div class="panel" id="global-light"></div>
+    <div class="panel" id="power"></div>
     <div class="row">
       <button id="reset-colours">Reset all key colours</button>
       <span style="color:var(--muted);font-size:13px">Every key on every layer back to Auto.</span>
@@ -140,7 +141,7 @@ code { background: var(--key); padding: 1px 5px; border-radius: 4px; }
 const VID = 0x12c9, PID = 0x6001, USAGE_PAGE = 0xff00, USAGE = 0x62, REPORT_ID = 8, PAYLOAD = 7;
 const CMD = { GET_INFO: 1, GET_KEYCODES: 2, SET_KEYCODE: 3, RESET: 4, GET_MATRIX: 5, SAVE: 6, GET_BOOT_KEYS: 7, SET_BOOT_KEYS: 8,
   GET_LIGHTING: 9, SET_LIGHTING: 10, GET_LAYER_COLOR: 11, SET_LAYER_COLOR: 12, GET_KEY_RGB: 13, SET_KEY_RGB: 14, RESET_COLORS: 15,
-  SET_KEY_AUTO: 16, GET_SOLID_RGB: 17, SET_SOLID_RGB: 18 };
+  SET_KEY_AUTO: 16, GET_SOLID_RGB: 17, SET_SOLID_RGB: 18, GET_SLEEP: 19, SET_SLEEP: 20 };
 const STATUS = { 0: "ok", 1: "unknown command", 2: "out of range", 3: "keycode not allowed", 4: "no key at that position" };
 
 // ---- GM610 physical layout: [label, width, row, col] ----------------------
@@ -244,7 +245,7 @@ class MockDevice {
     this.defaults[1][0] = [0x35,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,0x40,0x41,0x42,0x43,0x44,0x45,0x4c];
     this.map = JSON.parse(JSON.stringify(this.defaults));
     this.colors = [0, 1, 2, 3].map(() => base.map(r => r.map(() => ({ auto: true, rgb: [0, 0, 0] }))));
-    this.light = [3, 255, 2]; this.solid = [111, 0, 144]; this.boot = [0xff, 0xff, 0xff];
+    this.light = [3, 255, 2]; this.solid = [111, 0, 144]; this.sleep = 5; this.boot = [0xff, 0xff, 0xff];
     this.hl = [[0, 0, 0, 0], [1, 0, 129, 126], [1, 180, 75, 0], [1, 195, 0, 60]];
   }
   async sendFeatureReport(id, data) {
@@ -266,6 +267,8 @@ class MockDevice {
     else if (cmd === CMD.SET_KEY_AUTO) { if (bad()) st = 2; else this.colors[a][b][c].auto = true; }
     else if (cmd === CMD.GET_SOLID_RGB) out.splice(0, 3, ...this.solid);
     else if (cmd === CMD.SET_SOLID_RGB) this.solid = [a, b, c];
+    else if (cmd === CMD.GET_SLEEP) out[0] = this.sleep;
+    else if (cmd === CMD.SET_SLEEP) { if (a > 240) st = 2; else this.sleep = a; }
     else if (cmd === CMD.RESET_COLORS) this.colors.forEach(l => l.forEach(r => r.forEach(k => k.auto = true)));
     else if (cmd !== CMD.SAVE) st = 1;
     this.resp = Uint8Array.from([cmd, s, st, ...out]);
@@ -302,6 +305,7 @@ let selected = null;            // keymap mode: [r, c]
 let lightSel = new Set();       // lighting mode: "r,c" keys
 let lighting = { effect: 3, brightness: 255, speed: 2 };
 let solidRgb = [111, 0, 144];
+let sleepMin = 5; // idle minutes before Bluetooth sleep, 0 = never
 // per layer: { on: highlight this layer's keys, rgb: highlight colour } (layer 0 never highlights)
 let layerHl = [{ on: false, rgb: [0, 0, 0] }, { on: true, rgb: [0, 129, 126] }, { on: true, rgb: [180, 75, 0] }, { on: true, rgb: [195, 0, 60] }];
 let bootKeys = [0xff, 0xff, 0xff], pickingBoot = false, bootPick = [];
@@ -411,7 +415,7 @@ function setMode(m) {
     : m === "lighting" ? "Click keys to select them (click again to deselect), then pick their colour below. Keys show the colour the keyboard draws."
     : "Press keys on the keyboard: each lights up as the firmware sees it.";
   buildTabs(); render();
-  if (m === "lighting") { renderKeyColour(); renderGlobalLight(); }
+  if (m === "lighting") { renderKeyColour(); renderGlobalLight(); renderPower(); }
   if (m === "tester") startTester();
 }
 
@@ -616,6 +620,12 @@ const pushSolid = throttled(async rgb => {
   catch (e) { setStatus("Couldn't set solid colour: " + e.message, true); }
 });
 
+const pushSleep = throttled(async minutes => {
+  if (!device) return;
+  try { await request(CMD.SET_SLEEP, minutes); setSave("Saved to keyboard ✓"); }
+  catch (e) { setStatus("Couldn't set sleep timer: " + e.message, true); }
+});
+
 const pushLayerColour = throttled(async ([l, on, rgb]) => {
   if (!device) return;
   try { await request(CMD.SET_LAYER_COLOR, l, on ? 1 : 0, ...rgb); setSave("Saved to keyboard ✓"); }
@@ -672,6 +682,12 @@ function renderGlobalLight() {
   cols.append(left, right); el.appendChild(cols);
 }
 
+function renderPower() {
+  const el = $("power"); el.innerHTML = "<h3>Sleep timer <small>idle time before the keyboard sleeps on Bluetooth. Wired, it sleeps with your PC. Any key wakes it.</small></h3>";
+  slider(el, "Sleep after", sleepMin, 0, 120, v => { sleepMin = v; pushSleep(v, false); }, v => pushSleep(v, true),
+    { fmt: v => v === 0 ? "Never" : v + " min" });
+}
+
 // ---- tester -----------------------------------------------------------------------
 async function startTester() {
   if (testerOn || !device) return;
@@ -725,6 +741,7 @@ async function loadAll() {
   try { const b = await request(CMD.GET_BOOT_KEYS); bootKeys = [b[0], b[1], b[2]]; } catch (e) {}
   try { const g = await request(CMD.GET_LIGHTING); lighting = { effect: g[0], brightness: g[1], speed: g[2] }; } catch (e) {}
   try { const s = await request(CMD.GET_SOLID_RGB); solidRgb = [s[0], s[1], s[2]]; } catch (e) {}
+  try { sleepMin = (await request(CMD.GET_SLEEP))[0]; } catch (e) {}
   for (let l = 1; l < info.layers; l++) {
     try { const h = await request(CMD.GET_LAYER_COLOR, l); layerHl[l] = { on: h[0] === 1, rgb: [h[1], h[2], h[3]] }; } catch (e) {}
   }

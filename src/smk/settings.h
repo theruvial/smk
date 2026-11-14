@@ -18,6 +18,7 @@ typedef struct {
     uint8_t solid_rgb[3];    // colour of the solid effect
     uint8_t layer_rgb[3][3]; // highlight colour of layers 1..3 while held (index = layer - 1)
     uint8_t layer_hl;        // bit n: layer n highlights its keys (off: the base layer shows through)
+    uint8_t sleep_min;       // idle minutes before sleep, 0 = never (boards that define SLEEP_FRAMES_PER_SEC)
 } user_settings_t;
 
 #define BOOT_KEY_NONE 0xFFu

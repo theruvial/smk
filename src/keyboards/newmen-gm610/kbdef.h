@@ -63,6 +63,10 @@
 // is ~3.3 ms (~300 Hz) and keys are still scanned ~750 times a second.
 #define LED_SUBFRAMES_PER_SCAN 6
 
+// LED frames completed per second (~3.3 ms each), the clock for the editor's sleep timer
+// (src/smk/sleep.c). Approximate: the timer is good to within a few percent.
+#define SLEEP_FRAMES_PER_SEC 300
+
 // LED PWM registers: each key column pin doubles as its LED column driver.
 #define LED_PWM_C0  PWM40
 #define LED_PWM_C1  PWM41
