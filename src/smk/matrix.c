@@ -21,7 +21,17 @@ matrix_col_t matrix_previous[MATRIX_COLS];
 
 volatile bool matrix_updated;
 
-uint8_t action_layer;
+// Momentary layers stack: bit n set while an MO(n) key is held. Lookups take the
+// highest active layer whose entry isn't transparent, falling through to the
+// default layer, so MO keys work from any layer (QMK semantics).
+#define LAYER_STATE_BITS 8
+static uint8_t layer_state;
+
+// What each key resolved to when it went down, so its release undoes exactly that
+// even if the active layers changed in between.
+static __xdata uint16_t pressed_keycode[MATRIX_ROWS][MATRIX_COLS];
+
+uint8_t action_layer; // highest active momentary layer (0 = none); kept for boards that read it
 
 uint8_t default_layer;
 
@@ -29,6 +39,7 @@ void matrix_init()
 {
     action_layer   = 0;
     default_layer  = 0;
+    layer_state    = 0;
     matrix_updated = false;
 
     for (int i = 0; i < MATRIX_COLS; i++) {
@@ -42,14 +53,28 @@ void set_default_layer(uint8_t layer)
     default_layer = layer;
 }
 
-static uint16_t resolve_keycode(uint16_t base, uint8_t row, uint8_t col)
+static uint16_t resolve_keycode(uint8_t row, uint8_t col)
 {
-    if (!action_layer) {
-        return base;
+    for (uint8_t layer = LAYER_STATE_BITS - 1; layer > 0; layer--) {
+        if (layer_state & (uint8_t)(1u << layer)) {
+            const uint16_t kc = keymap_get(layer, row, col);
+            if (kc != KC_TRANSPARENT) {
+                return kc;
+            }
+        }
     }
+    return keymap_get(default_layer, row, col);
+}
 
-    const uint16_t overlay = keymap_get(action_layer, row, col);
-    return (overlay == KC_TRANSPARENT) ? base : overlay;
+static void update_action_layer(void)
+{
+    action_layer = 0;
+    for (uint8_t layer = LAYER_STATE_BITS - 1; layer > 0; layer--) {
+        if (layer_state & (uint8_t)(1u << layer)) {
+            action_layer = layer;
+            return;
+        }
+    }
 }
 
 static void send_keycode(uint16_t qcode, bool pressed)
@@ -87,19 +112,26 @@ static void send_keycode(uint16_t qcode, bool pressed)
 
 static void process_key_state(uint8_t row, uint8_t col, bool pressed)
 {
-    const uint16_t base = keymap_get(default_layer, row, col);
+    uint16_t qcode;
+    if (pressed) {
+        qcode                     = resolve_keycode(row, col);
+        pressed_keycode[row][col] = qcode;
+    } else {
+        qcode = pressed_keycode[row][col];
+    }
 
-    if (IS_QK_MOMENTARY(base)) {
-        if (pressed) {
-            action_layer = QK_MOMENTARY_GET_LAYER(base);
-        } else {
-            clear_keys();
-            action_layer = 0;
+    if (IS_QK_MOMENTARY(qcode)) {
+        const uint8_t layer = QK_MOMENTARY_GET_LAYER(qcode);
+        if (layer > 0 && layer < LAYER_STATE_BITS) {
+            if (pressed) {
+                layer_state |= (uint8_t)(1u << layer);
+            } else {
+                layer_state &= (uint8_t)~(1u << layer);
+            }
+            update_action_layer();
         }
         return;
     }
-
-    const uint16_t qcode = resolve_keycode(base, row, col);
 
     if (!kb_process_record(qcode, pressed)) {
         return;

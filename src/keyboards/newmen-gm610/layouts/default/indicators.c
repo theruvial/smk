@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "led_effect.h"
 #include "user_led.h"
+#include "dynamic_keymap.h"
 #include <string.h>
 
 // Per-key RGB for the GM610: 5 LED rows x 14 LED columns. Adapted from the NuPhy
@@ -23,9 +24,12 @@
 
 #define LED_BRIGHTNESS_DEFAULT 255
 
-// Solid effect colour, as a position on the colour wheel (led_color_wheel): 0 = red,
-// 85 = green, 170 = blue. 48 is purple (r=111, g=0, b=144).
-#define LED_COLOR_DEFAULT 48
+// Default colours (RGB): solid effect purple; layer highlights teal, orange, rose.
+static __code const uint8_t solid_default[3]    = {111, 0, 144};
+static __code const uint8_t layer_default[3][3] = {{0, 129, 126}, {180, 75, 0}, {195, 0, 60}}; // layers 1-3
+#define LAYER_HL_DEFAULT 0x0E // layers 1-3 highlight, the base layer doesn't
+
+extern uint8_t action_layer; // src/smk/matrix.c: highest held momentary layer, 0 = none
 #define LED_BRIGHTNESS_STEP    32
 
 // fb value -> DUTY2: the LED conducts while the column is LOW, i.e. for DUTY2 cycles.
@@ -64,7 +68,6 @@ static bool led_set_columns();
 void indicators_apply_defaults()
 {
     user_settings.led_effect     = FX_SOLID;
-    user_settings.led_color      = LED_COLOR_DEFAULT;
     user_settings.led_brightness = LED_BRIGHTNESS_DEFAULT;
     user_settings.led_speed      = LED_SPEED_DEFAULT;
     user_settings.ul_effect      = FX_OFF;
@@ -73,6 +76,16 @@ void indicators_apply_defaults()
     user_settings.battery_indicator_on = 0;
     user_settings.rf_link        = 0; // RF_MODE_2_4G
     user_settings.conn_mode      = 1; // USB
+    user_settings.boot_keys[0]   = BOOT_KEY_NONE; // no custom failsafe combo
+    user_settings.boot_keys[1]   = BOOT_KEY_NONE;
+    user_settings.boot_keys[2]   = BOOT_KEY_NONE;
+    for (uint8_t i = 0; i < 3; i++) {
+        user_settings.solid_rgb[i] = solid_default[i];
+        for (uint8_t l = 0; l < 3; l++) {
+            user_settings.layer_rgb[l][i] = layer_default[l][i];
+        }
+    }
+    user_settings.layer_hl = LAYER_HL_DEFAULT;
 }
 
 void indicators_validate_settings()
@@ -199,10 +212,78 @@ void indicators_render()
     }
 }
 
+#ifdef GM610_PIN_FINDER
+// LED wiring probe through the normal PWM column path: every column at full duty,
+// and one candidate row-sink pin raised per step. Each cycle: 2 dark steps, then the
+// 18 pins below, each lit for ~3/4 of a ~2 s step. Filmed, it maps pin -> row/colour.
+#    define FINDER_STEP_FRAMES 130 // ~2 s at ~15 ms per frame
+// Round 2: the Tab and Caps rows' green sinks weren't among the first 18 pins.
+// Candidates: P0.0, P1.0-P1.5 (Air60 underglow pins), P7.5-P7.7 (driven by stock).
+#    define FINDER_PINS 10
+static __code const uint8_t finder_port[FINDER_PINS] = {0, 1, 1, 1, 1, 1, 1, 7, 7, 7};
+static __code const uint8_t finder_bit[FINDER_PINS]  = {0, 0, 1, 2, 3, 4, 5, 5, 6, 7};
+static uint16_t finder_frames;
+static bool     finder_ready;
+
+static bool finder_step(void)
+{
+    if (!finder_ready) {
+        finder_ready = true;
+        GPIO_LOW(0, _P0_0);
+        GPIO_OUTPUT(0, _P0_0);
+        GPIO_LOW(1, 0x3F);
+        GPIO_OUTPUT(1, 0x3F);
+        GPIO_LOW(7, (uint8_t)(_P7_5 | _P7_6 | _P7_7));
+        GPIO_OUTPUT(7, (uint8_t)(_P7_5 | _P7_6 | _P7_7));
+    }
+    // candidates back off every subframe (pre_update only parks the known sinks)
+    GPIO_LOW(0, _P0_0);
+    GPIO_LOW(1, 0x3F);
+    GPIO_LOW(7, (uint8_t)(_P7_5 | _P7_6 | _P7_7));
+
+    if (++anim_ctr >= (uint8_t)(LED_ROWS * LED_COLS)) {
+        anim_ctr = 0;
+        finder_frames++;
+    }
+    const uint16_t step = (finder_frames / FINDER_STEP_FRAMES) % (uint16_t)(FINDER_PINS + 2u);
+    const bool     on   = step >= 2u && (finder_frames % FINDER_STEP_FRAMES) < (FINDER_STEP_FRAMES * 3u / 4u);
+
+    indicators_pwm_disable();
+    if (on) {
+        SET_PWM_DUTY_2(LED_PWM_C0, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C1, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C2, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C3, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C4, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C5, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C6, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C7, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C8, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C9, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C10, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C11, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C12, LED_DUTY(255));
+        SET_PWM_DUTY_2(LED_PWM_C13, LED_DUTY(255));
+        const uint8_t i = (uint8_t)(step - 2u);
+        const uint8_t m = (uint8_t)(1u << finder_bit[i]);
+        switch (finder_port[i]) {
+            case 0: P0 |= m; break;
+            case 1: P1 |= m; break;
+            default: P7 |= m; break;
+        }
+        indicators_pwm_enable();
+    }
+    return anim_ctr == 0;
+}
+#endif
+
 bool indicators_update_step(keyboard_state_t *keyboard, uint8_t current_step)
 {
     keyboard;
     current_step;
+#ifdef GM610_PIN_FINDER
+    return finder_step();
+#else
 
     if (++anim_ctr >= (uint8_t)(LED_ROWS * LED_COLS)) {
         anim_ctr  = 0;
@@ -233,6 +314,7 @@ bool indicators_update_step(keyboard_state_t *keyboard, uint8_t current_step)
     }
 
     return frame_wrapped;
+#endif
 }
 
 void indicators_post_update()
@@ -240,20 +322,39 @@ void indicators_post_update()
     PWM00CON &= ~(1 << 5);
 }
 
+// colour scaled by the global brightness
+static void scaled(const uint8_t *src, uint8_t *out)
+{
+    out[0] = SCALE_BRI(src[0]);
+    out[1] = SCALE_BRI(src[1]);
+    out[2] = SCALE_BRI(src[2]);
+}
+
 static void led_regen_one()
 {
     uint8_t rgb[3] = {0, 0, 0};
+
+    const uint8_t layer = action_layer < 4 ? action_layer : 0;
+    const bool    hl    = layer && ((user_settings.layer_hl >> layer) & 1u);
 
     if (regen_row == status_row && regen_col == status_col && !(status_blink && (frame_ctr & 0x08))) {
         rgb[0] = status_rgb[0];
         rgb[1] = status_rgb[1];
         rgb[2] = status_rgb[2];
+    } else if (!keycolor_is_auto(layer, regen_row, regen_col)) {
+        // a colour set for this key on this layer wins over effects and highlights
+        scaled(keycolor_rgb(layer, regen_row, regen_col), rgb);
+    } else if (hl) {
+        // layer highlight: what this layer defines lights in its colour, the rest goes dark
+        const uint16_t kc = keymap_get(layer, regen_row, regen_col);
+        if (kc != KC_TRANSPARENT && kc != KC_NO) {
+            scaled(user_settings.layer_rgb[layer - 1u], rgb);
+        }
+    } else if (layer && !keycolor_is_auto(0, regen_row, regen_col)) {
+        // no highlight on this layer: the base layer's own colour shows through
+        scaled(keycolor_rgb(0, regen_row, regen_col), rgb);
     } else if (user_settings.led_effect == FX_SOLID) {
-        // the core's solid is white; here it's the saved colour
-        led_color_wheel(user_settings.led_color, rgb);
-        rgb[0] = SCALE_BRI(rgb[0]);
-        rgb[1] = SCALE_BRI(rgb[1]);
-        rgb[2] = SCALE_BRI(rgb[2]);
+        scaled(user_settings.solid_rgb, rgb); // the core's solid is white; here it's the saved colour
     } else if (user_settings.led_effect < FX_OFF) {
         led_effect_rgb((led_effect_t)user_settings.led_effect, regen_row, regen_col, led_phase, user_settings.led_brightness, rgb);
     }

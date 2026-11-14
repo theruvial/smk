@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GM610 Configurator</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --text: #1d2026; --muted: #69707d; --line: #dde0e6;
+  --key: #fafbfc; --key-edge: #c9ced6; --key-text: #1d2026; --accent: #2f6fde; --accent-text: #fff;
+  --pressed: #2bb673; --warn: #c2410c; --trns: #9aa1ad; --unlit: #2a2d33;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --panel: #1e2126; --text: #e6e8eb; --muted: #9097a3; --line: #30343b;
+    --key: #2a2e35; --key-edge: #3d424b; --key-text: #e6e8eb; --accent: #5b8ff0; --accent-text: #fff;
+    --pressed: #34c37f; --warn: #f97316; --trns: #6b7280; --unlit: #121417;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0 8px 0 0; }
+#status { color: var(--muted); }
+#status.err { color: var(--warn); }
+#save { margin-left: auto; color: var(--muted); font-size: 13px; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--key); color: var(--text); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary, button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+main { padding: 18px 20px 40px; max-width: 1100px; margin: 0 auto; }
+
+/* mode cards */
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.mode { text-align: left; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+.mode b { display: block; font-size: 16px; margin-bottom: 2px; }
+.mode span { color: var(--muted); font-size: 13px; }
+.mode.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: var(--panel); color: var(--text); }
+.mode.on b { color: var(--accent); }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+#hint { color: var(--muted); margin: 0 0 10px; }
+.board-wrap { overflow-x: auto; padding-bottom: 6px; }
+.board { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.board.lit { background: #0d0e10; border-color: #24272d; }
+.key { position: absolute; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+  background: var(--key); border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: 6px; color: var(--key-text);
+  font-size: 12px; cursor: pointer; user-select: none; overflow: hidden; padding: 2px; line-height: 1.15; }
+.key:hover { border-color: var(--accent); }
+.key.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.board.lit .key.sel { outline: 2px solid #fff; }
+.key.trns { color: var(--trns); }
+.key.pressed { background: var(--pressed) !important; color: #fff; border-color: var(--pressed); }
+.board.lit .key { border-color: rgba(255,255,255,.12); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.85); }
+.key .tag { position: absolute; top: 2px; right: 4px; font-size: 9px; opacity: .8; }
+
+.panel { margin-top: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.panel h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.panel h3 small { font-weight: 400; }
+.panel p { margin: 4px 0 0; color: var(--muted); }
+.panel p b { color: var(--text); }
+.group { margin-bottom: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips button { min-width: 42px; padding: 5px 8px; font-size: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } .modes { grid-template-columns: 1fr; } }
+#search { width: 100%; font: inherit; padding: 8px 10px; margin-bottom: 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+#search:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.empty { color: var(--muted); margin: 4px 0; }
+.slider { margin-top: 12px; }
+.sline { display: flex; align-items: center; gap: 12px; }
+.sline input[type=range] { flex: 1; accent-color: var(--accent); }
+.sline .val { min-width: 44px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+input.hue { height: 8px; border-radius: 4px; appearance: none; -webkit-appearance: none;
+  background: linear-gradient(90deg, rgb(255,0,0), rgb(0,0,255) 33.3%, rgb(0,255,0) 66.6%, rgb(255,0,0)); }
+input.hue::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #333; }
+input.hue:disabled { opacity: .35; }
+.picker-rgb { max-width: 420px; }
+.picker-rgb .native { width: 44px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+.picker-rgb .hexbox { width: 90px; font: 13px ui-monospace, monospace; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); text-transform: uppercase; }
+.picker-rgb .channel { margin-top: 6px; }
+.picker-rgb .ch { width: 14px; font-weight: 600; color: var(--muted); }
+.picker-rgb input[type=range] { height: 8px; border-radius: 4px; appearance: none; -webkit-appearance: none; }
+.picker-rgb input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #333; }
+.picker-rgb .num { width: 56px; font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.disabled { opacity: .4; pointer-events: none; }
+.check { display: flex; gap: 6px; align-items: center; color: var(--text); }
+.swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); flex: none; }
+.notice { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+code { background: var(--key); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GM610 Configurator</h1>
+  <button id="connect" class="primary">Connect keyboard</button>
+  <span id="status">Not connected</span>
+  <span id="save"></span>
+</header>
+<main>
+  <div id="nohid" class="notice" hidden>
+    This browser can't talk to USB keyboards (no WebHID). Open this page in <b>Chrome</b> or <b>Edge</b>
+    (from <code>https://</code> or <code>http://127.0.0.1</code>). Add <code>?mock=1</code> to the address to try it without a keyboard.
+  </div>
+
+  <div class="modes" id="modes">
+    <button class="mode" data-mode="keymap"><b>Keymap</b><span>What each key does, per layer</span></button>
+    <button class="mode" data-mode="lighting"><b>Lighting</b><span>Colours per key and layer, effects</span></button>
+    <button class="mode" data-mode="tester"><b>Key Tester</b><span>See presses as the keyboard sees them</span></button>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <p id="hint"></p>
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+
+  <!-- Keymap mode -->
+  <div id="keymap-view">
+    <div class="panel" id="picker"></div>
+    <div class="panel" id="failsafe"></div>
+    <div class="row">
+      <button id="reset-keymap">Reset keymap to defaults</button>
+      <span style="color:var(--muted);font-size:13px">Restores the layout the firmware was built with.</span>
+    </div>
+  </div>
+
+  <!-- Lighting mode -->
+  <div id="lighting-view" hidden>
+    <div class="panel" id="key-colour"></div>
+    <div class="panel" id="global-light"></div>
+    <div class="row">
+      <button id="reset-colours">Reset all key colours</button>
+      <span style="color:var(--muted);font-size:13px">Every key on every layer back to Auto.</span>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+// ---- protocol (src/smk/config_protocol.h) ----------------------------------
+const VID = 0x12c9, PID = 0x6001, USAGE_PAGE = 0xff00, USAGE = 0x62, REPORT_ID = 8, PAYLOAD = 7;
+const CMD = { GET_INFO: 1, GET_KEYCODES: 2, SET_KEYCODE: 3, RESET: 4, GET_MATRIX: 5, SAVE: 6, GET_BOOT_KEYS: 7, SET_BOOT_KEYS: 8,
+  GET_LIGHTING: 9, SET_LIGHTING: 10, GET_LAYER_COLOR: 11, SET_LAYER_COLOR: 12, GET_KEY_RGB: 13, SET_KEY_RGB: 14, RESET_COLORS: 15,
+  SET_KEY_AUTO: 16, GET_SOLID_RGB: 17, SET_SOLID_RGB: 18 };
+const STATUS = { 0: "ok", 1: "unknown command", 2: "out of range", 3: "keycode not allowed", 4: "no key at that position" };
+
+// ---- GM610 physical layout: [label, width, row, col] ----------------------
+const LAYOUT = [
+  [["Esc",1,0,0],["1",1,0,1],["2",1,0,2],["3",1,0,3],["4",1,0,4],["5",1,0,5],["6",1,0,6],["7",1,0,7],["8",1,0,8],["9",1,0,9],["0",1,0,10],["-",1,0,11],["=",1,0,12],["Bksp",2,0,13]],
+  [["Tab",1.5,1,0],["Q",1,1,1],["W",1,1,2],["E",1,1,3],["R",1,1,4],["T",1,1,5],["Y",1,1,6],["U",1,1,7],["I",1,1,8],["O",1,1,9],["P",1,1,10],["[",1,1,11],["]",1,1,12],["\\",1.5,1,13]],
+  [["Caps",1.75,2,0],["A",1,2,1],["S",1,2,2],["D",1,2,3],["F",1,2,4],["G",1,2,5],["H",1,2,6],["J",1,2,7],["K",1,2,8],["L",1,2,9],[";",1,2,10],["'",1,2,11],["Enter",2.25,2,13]],
+  [["Shift",2.25,3,0],["Z",1,3,1],["X",1,3,2],["C",1,3,3],["V",1,3,4],["B",1,3,5],["N",1,3,6],["M",1,3,7],[",",1,3,8],[".",1,3,9],["/",1,3,10],["Shift",2.75,3,13]],
+  [["Ctrl",1.25,4,0],["Win",1.25,4,1],["Alt",1.25,4,2],["Space",6.25,4,5],["Alt",1.25,4,8],["Fn",1.25,4,9],["Menu",1.25,4,12],["Ctrl",1.25,4,13]],
+];
+const KEYS = LAYOUT.flat(); // [name, w, r, c]
+
+// ---- keycodes (QMK numbering, as in smk/src/smk/keycodes.h) ---------------
+// Each entry: [code, label, QMK-style name, extra search words]
+const KC = {};
+const GROUPS = [];
+function group(name, entries) { GROUPS.push([name, entries]); for (const [c, l] of entries) KC[c] = l; }
+const letters = []; for (let i = 0; i < 26; i++) { const ch = String.fromCharCode(65 + i); letters.push([0x04 + i, ch, "KC_" + ch]); }
+group("Letters", letters);
+const nums = []; "1234567890".split("").forEach((d, i) => nums.push([0x1e + i, d, "KC_" + d, "number digit"]));
+group("Numbers", nums);
+group("Editing", [[0x28,"Enter","KC_ENT","return"],[0x29,"Esc","KC_ESC","escape"],[0x2a,"Bksp","KC_BSPC","backspace"],[0x2b,"Tab","KC_TAB"],[0x2c,"Space","KC_SPC","spacebar"],[0x39,"Caps","KC_CAPS","caps lock"],[0x4c,"Del","KC_DEL","delete"],[0x49,"Ins","KC_INS","insert"],[0x65,"Menu","KC_APP","application context"]]);
+group("Symbols", [[0x2d,"-","KC_MINS","minus dash hyphen"],[0x2e,"=","KC_EQL","equal plus"],[0x2f,"[","KC_LBRC","bracket brace"],[0x30,"]","KC_RBRC","bracket brace"],[0x31,"\\","KC_BSLS","backslash pipe"],[0x33,";","KC_SCLN","semicolon colon"],[0x34,"'","KC_QUOT","quote apostrophe"],[0x35,"`","KC_GRV","grave tilde backtick"],[0x36,",","KC_COMM","comma"],[0x37,".","KC_DOT","period dot"],[0x38,"/","KC_SLSH","slash question"]]);
+group("Modifiers", [[0xe0,"LCtrl","KC_LCTL","control"],[0xe1,"LShift","KC_LSFT"],[0xe2,"LAlt","KC_LALT","option"],[0xe3,"LWin","KC_LGUI","gui super command windows"],[0xe4,"RCtrl","KC_RCTL","control"],[0xe5,"RShift","KC_RSFT"],[0xe6,"RAlt","KC_RALT","altgr option"],[0xe7,"RWin","KC_RGUI","gui super command windows"]]);
+group("Navigation", [[0x52,"↑","KC_UP","up arrow"],[0x51,"↓","KC_DOWN","down arrow"],[0x50,"←","KC_LEFT","left arrow"],[0x4f,"→","KC_RGHT","right arrow"],[0x4a,"Home","KC_HOME"],[0x4d,"End","KC_END"],[0x4b,"PgUp","KC_PGUP","page up"],[0x4e,"PgDn","KC_PGDN","page down"],[0x46,"PrtSc","KC_PSCR","print screen"],[0x47,"ScrLk","KC_SCRL","scroll lock"],[0x48,"Pause","KC_PAUS","break"]]);
+const fkeys = []; for (let i = 0; i < 12; i++) fkeys.push([0x3a + i, "F" + (i + 1), "KC_F" + (i + 1)]); for (let i = 0; i < 12; i++) fkeys.push([0x68 + i, "F" + (i + 13), "KC_F" + (i + 13)]);
+group("Function keys", fkeys);
+group("Media", [[0xa8,"Mute","KC_MUTE","audio volume"],[0xa9,"Vol+","KC_VOLU","volume up audio"],[0xaa,"Vol−","KC_VOLD","volume down audio"],[0xae,"Play","KC_MPLY","play pause"],[0xab,"Next","KC_MNXT","next track"],[0xac,"Prev","KC_MPRV","previous track"],[0xad,"Stop","KC_MSTP"],[0xbd,"Bri+","KC_BRIU","screen brightness up"],[0xbe,"Bri−","KC_BRID","screen brightness down"],[0xb2,"Calc","KC_CALC","calculator"],[0xb3,"My PC","KC_MYCM","computer explorer"],[0xb1,"Mail","KC_MAIL","email"],[0xb4,"Search","KC_WSCH","web"],[0xb5,"WWW Home","KC_WHOM","web browser"],[0xb6,"WWW Back","KC_WBAK","web browser"]]);
+// GM610 board keycodes (newmen-gm610/kbdef.h enum, from SAFE_RANGE = 0x7E40)
+group("Lighting", [[0x7e45,"Effect+","FX_NEXT","rgb backlight next effect animation"],[0x7e46,"Effect−","FX_PREV","rgb backlight previous effect animation"],[0x7e47,"Light+","BRI_UP","rgb backlight brightness up"],[0x7e48,"Light−","BRI_DN","rgb backlight brightness down"],[0x7e49,"Speed+","SPD_UP","rgb animation speed up"],[0x7e4a,"Speed−","SPD_DN","rgb animation speed down"]]);
+group("Connection", [[0x7e40,"Wired","LNK_USB","usb cable"],[0x7e41,"BT 1","LNK_BT1","bluetooth wireless pair"],[0x7e42,"BT 2","LNK_BT2","bluetooth wireless pair"],[0x7e43,"BT 3","LNK_BT3","bluetooth wireless pair"],[0x7e44,"2.4 GHz","LNK_24G","dongle wireless receiver"]]);
+group("Layers", [[0x5221,"Fn1 (hold)","MO(1)","layer momentary fn"],[0x5222,"Fn2 (hold)","MO(2)","layer momentary"],[0x5223,"Fn3 (hold)","MO(3)","layer momentary"]]);
+group("Special", [[0x0001,"▽ Transparent","KC_TRNS","see through fall through"],[0x0000,"✕ None","KC_NO","disable nothing blank"]]);
+const SHORT = { 0x5221: "MO(1)", 0x5222: "MO(2)", 0x5223: "MO(3)", 0x0001: "▽", 0x0000: "" };
+function label(code) {
+  if (code in SHORT) return SHORT[code];
+  if (code >= 0x5220 && code <= 0x523f) return "MO(" + (code & 0x1f) + ")";
+  return KC[code] ?? ("0x" + code.toString(16).padStart(4, "0"));
+}
+
+// ---- colours ---------------------------------------------------------------------
+function wheel(i) { // same as led_color_wheel() in src/smk/led_effect.c
+  if (i < 85) return [255 - i * 3, 0, i * 3];
+  if (i < 170) { i -= 85; return [0, i * 3, 255 - i * 3]; }
+  i -= 170; return [i * 3, 255 - i * 3, 0];
+}
+const css = ([r, g, b], k = 1) => "rgb(" + Math.round(r * k) + "," + Math.round(g * k) + "," + Math.round(b * k) + ")";
+const hex = rgb => "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("");
+const fromHex = h => { const m = /^#?([0-9a-f]{6})$/i.exec(h.trim()); if (!m) return null; const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+
+// Full RGB picker: native colour square + R/G/B sliders + hex box, kept in sync.
+// onInput fires while dragging (throttle on the caller side), onChange when settled.
+function rgbPicker(parent, initial, onInput, onChange) {
+  const rgb = initial.slice();
+  const wrap = document.createElement("div"); wrap.className = "picker-rgb";
+  const top = document.createElement("div"); top.className = "sline";
+  const native = document.createElement("input"); native.type = "color"; native.className = "native";
+  const hexBox = document.createElement("input"); hexBox.type = "text"; hexBox.className = "hexbox"; hexBox.maxLength = 7; hexBox.spellcheck = false;
+  top.append(native, hexBox); wrap.appendChild(top);
+  const sliders = ["R", "G", "B"].map((name, i) => {
+    const line = document.createElement("div"); line.className = "sline channel";
+    const lab = document.createElement("span"); lab.className = "ch"; lab.textContent = name;
+    const range = document.createElement("input"); range.type = "range"; range.min = 0; range.max = 255;
+    const num = document.createElement("input"); num.type = "number"; num.min = 0; num.max = 255; num.className = "num";
+    range.oninput = () => { rgb[i] = +range.value; sync(); onInput(rgb.slice()); };
+    range.onchange = () => onChange(rgb.slice());
+    num.onchange = () => { rgb[i] = Math.max(0, Math.min(255, +num.value | 0)); sync(); onChange(rgb.slice()); };
+    line.append(lab, range, num); wrap.appendChild(line);
+    return { range, num };
+  });
+  function sync() {
+    native.value = hex(rgb); hexBox.value = hex(rgb).toUpperCase();
+    sliders.forEach((s, i) => {
+      s.range.value = rgb[i]; s.num.value = rgb[i];
+      const lo = rgb.slice(), hi = rgb.slice(); lo[i] = 0; hi[i] = 255;
+      s.range.style.background = "linear-gradient(90deg," + css(lo) + "," + css(hi) + ")";
+    });
+  }
+  native.oninput = () => { const v = fromHex(native.value); if (v) { rgb.splice(0, 3, ...v); sync(); onInput(rgb.slice()); } };
+  native.onchange = () => onChange(rgb.slice());
+  hexBox.onchange = () => { const v = fromHex(hexBox.value); if (v) { rgb.splice(0, 3, ...v); sync(); onChange(rgb.slice()); } else sync(); };
+  sync(); parent.appendChild(wrap);
+  return { get: () => rgb.slice(), set: v => { rgb.splice(0, 3, ...v); sync(); } };
+}
+const EFFECTS = ["Ripple", "Horizontal wave", "Vertical wave", "Solid colour", "Off"];
+const FX_SOLID = 3, FX_OFF = 4;
+
+// ---- transport ---------------------------------------------------------------
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let device = null, seq = 0, chain = Promise.resolve();
+
+class MockDevice {
+  constructor() {
+    this.rows = 5; this.cols = 14; this.layers = 4; this.resp = new Uint8Array(PAYLOAD);
+    const base = [[0x29,0x1e,0x1f,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x2d,0x2e,0x2a],
+      [0x2b,0x14,0x1a,0x08,0x15,0x17,0x1c,0x18,0x0c,0x12,0x13,0x2f,0x30,0x31],
+      [0x39,0x04,0x16,0x07,0x09,0x0a,0x0b,0x0d,0x0e,0x0f,0x33,0x34,0,0x28],
+      [0xe1,0x1d,0x1b,0x06,0x19,0x05,0x11,0x10,0x36,0x37,0x38,0,0,0xe5],
+      [0xe0,0xe3,0xe2,0,0,0x2c,0,0,0xe6,0x5221,0,0,0x65,0xe4]];
+    this.defaults = [0, 1, 2, 3].map(l => base.map(r => r.map(k => l === 0 ? k : (k ? 1 : 0))));
+    this.defaults[1][0] = [0x35,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,0x40,0x41,0x42,0x43,0x44,0x45,0x4c];
+    this.map = JSON.parse(JSON.stringify(this.defaults));
+    this.colors = [0, 1, 2, 3].map(() => base.map(r => r.map(() => ({ auto: true, rgb: [0, 0, 0] }))));
+    this.light = [3, 255, 2]; this.solid = [111, 0, 144]; this.boot = [0xff, 0xff, 0xff];
+    this.hl = [[0, 0, 0, 0], [1, 0, 129, 126], [1, 180, 75, 0], [1, 195, 0, 60]];
+  }
+  async sendFeatureReport(id, data) {
+    const [cmd, s, a, b, c, d, e] = data; let st = 0; const out = [0, 0, 0, 0];
+    const bad = () => a >= 4 || b >= 5 || c >= 14;
+    if (cmd === CMD.GET_INFO) out.splice(0, 4, 1, this.rows, this.cols, this.layers);
+    else if (cmd === CMD.GET_KEYCODES) { const x = this.map[a][b][c], y = c + 1 < this.cols ? this.map[a][b][c + 1] : 0; out.splice(0, 4, x & 255, x >> 8, y & 255, y >> 8); }
+    else if (cmd === CMD.SET_KEYCODE) { if (bad()) st = 2; else if (!this.defaults[0][b][c]) st = 4; else this.map[a][b][c] = d | (e << 8); }
+    else if (cmd === CMD.RESET) this.map = JSON.parse(JSON.stringify(this.defaults));
+    else if (cmd === CMD.GET_MATRIX) out.splice(0, 3, 0, 0, 0);
+    else if (cmd === CMD.GET_BOOT_KEYS) out.splice(0, 3, ...this.boot);
+    else if (cmd === CMD.SET_BOOT_KEYS) { const k = [a, b, c].filter(x => x !== 0xff); if (new Set(k).size !== k.length) st = 2; else this.boot = [a, b, c]; }
+    else if (cmd === CMD.GET_LIGHTING) out.splice(0, 3, ...this.light);
+    else if (cmd === CMD.SET_LIGHTING) this.light = [Math.min(a, 4), b, Math.max(1, Math.min(c, 16))];
+    else if (cmd === CMD.GET_LAYER_COLOR) { if (a < 1 || a > 3) st = 2; else out.splice(0, 4, ...this.hl[a]); }
+    else if (cmd === CMD.SET_LAYER_COLOR) { if (a < 1 || a > 3) st = 2; else this.hl[a] = [b ? 1 : 0, c, d, e]; }
+    else if (cmd === CMD.GET_KEY_RGB) { if (bad()) st = 2; else { const k = this.colors[a][b][c]; out.splice(0, 4, ...k.rgb, k.auto ? 1 : 0); } }
+    else if (cmd === CMD.SET_KEY_RGB) { const l = a >> 4, r = a & 15; if (l >= 4 || r >= 5 || b >= 14) st = 2; else if (!this.defaults[0][r][b]) st = 4; else this.colors[l][r][b] = { auto: false, rgb: [c, d, e] }; }
+    else if (cmd === CMD.SET_KEY_AUTO) { if (bad()) st = 2; else this.colors[a][b][c].auto = true; }
+    else if (cmd === CMD.GET_SOLID_RGB) out.splice(0, 3, ...this.solid);
+    else if (cmd === CMD.SET_SOLID_RGB) this.solid = [a, b, c];
+    else if (cmd === CMD.RESET_COLORS) this.colors.forEach(l => l.forEach(r => r.forEach(k => k.auto = true)));
+    else if (cmd !== CMD.SAVE) st = 1;
+    this.resp = Uint8Array.from([cmd, s, st, ...out]);
+  }
+  async receiveFeatureReport() { await sleep(1); return new DataView(Uint8Array.from([REPORT_ID, ...this.resp]).buffer); }
+}
+
+function request(cmd, ...args) {
+  const run = async () => {
+    seq = (seq + 1) & 0xff; const mySeq = seq;
+    const data = new Uint8Array(PAYLOAD); data[0] = cmd; data[1] = mySeq; args.forEach((v, i) => data[2 + i] = v & 0xff);
+    await device.sendFeatureReport(REPORT_ID, data);
+    for (let tries = 0; tries < 40; tries++) {
+      const dv = await device.receiveFeatureReport(REPORT_ID);
+      let b = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+      if (b.length === PAYLOAD + 1 && b[0] === REPORT_ID) b = b.subarray(1);
+      if (b[0] === cmd && b[1] === mySeq) {
+        if (b[2] !== 0) throw new Error(STATUS[b[2]] || ("error " + b[2]));
+        return b.slice(3, 7);
+      }
+      await sleep(tries < 5 ? 1 : 5);
+    }
+    throw new Error("keyboard didn't answer");
+  };
+  const p = chain.then(run, run);
+  chain = p.catch(() => {});
+  return p;
+}
+
+// ---- state ------------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+let info = null, keymap = [], keyColors = [], mode = "keymap", layer = 0;
+let selected = null;            // keymap mode: [r, c]
+let lightSel = new Set();       // lighting mode: "r,c" keys
+let lighting = { effect: 3, brightness: 255, speed: 2 };
+let solidRgb = [111, 0, 144];
+// per layer: { on: highlight this layer's keys, rgb: highlight colour } (layer 0 never highlights)
+let layerHl = [{ on: false, rgb: [0, 0, 0] }, { on: true, rgb: [0, 129, 126] }, { on: true, rgb: [180, 75, 0] }, { on: true, rgb: [195, 0, 60] }];
+let bootKeys = [0xff, 0xff, 0xff], pickingBoot = false, bootPick = [];
+let saveTimer = null, testerOn = false, testerLayer = 0, phase = 0;
+const UNIT = 54, GAP = 4;
+const keyEls = {};
+
+function setStatus(text, err) { $("status").textContent = text; $("status").className = err ? "err" : ""; }
+function setSave(text) { $("save").textContent = text; }
+const posName = k => { const e = KEYS.find(([, , r, c]) => ((r << 4) | c) === k); return e ? e[0] : "?"; };
+const layerName = l => l === 0 ? "Base layer" : "Layer " + l + (l === 1 ? " (Fn)" : "");
+
+// ---- board ------------------------------------------------------------------------
+function buildBoard() {
+  const board = $("board"); board.innerHTML = "";
+  let maxX = 0;
+  LAYOUT.forEach((row, ri) => {
+    let x = 0;
+    for (const [name, w, r, c] of row) {
+      const el = document.createElement("div");
+      el.className = "key";
+      el.style.left = (14 + x * UNIT) + "px"; el.style.top = (14 + ri * UNIT) + "px";
+      el.style.width = (w * UNIT - GAP) + "px"; el.style.height = (UNIT - GAP) + "px";
+      el.dataset.name = name; el.title = name;
+      el.onclick = ev => clickKey(r, c, ev);
+      board.appendChild(el); keyEls[r + "," + c] = el;
+      x += w;
+    }
+    maxX = Math.max(maxX, x);
+  });
+  board.style.width = (28 + maxX * UNIT - GAP) + "px";
+  board.style.height = (28 + LAYOUT.length * UNIT - GAP) + "px";
+}
+
+// What the keyboard draws for a key on a layer (mirrors led_regen_one in indicators.c).
+const isBlack = rgb => rgb[0] + rgb[1] + rgb[2] === 0;
+function keyLight(l, r, c) {
+  const k = keyColors[l]?.[r]?.[c] ?? { auto: true, rgb: [0, 0, 0] };
+  if (!k.auto) return isBlack(k.rgb) ? { bg: "var(--unlit)", tag: "off" } : { bg: css(k.rgb), tag: "" };
+  if (l > 0 && layerHl[l].on) {
+    const code = keymap[l]?.[r]?.[c];
+    const unused = code === 1 || code === 0; // nothing on this layer: the keyboard leaves it dark
+    return unused ? { bg: "var(--unlit)", tag: "" } : { bg: css(layerHl[l].rgb), tag: "" };
+  }
+  if (l > 0) return keyLight(0, r, c); // no highlight: shows the base layer through
+  if (lighting.effect === FX_OFF) return { bg: "var(--unlit)", tag: "off" };
+  if (lighting.effect === FX_SOLID) return { bg: css(solidRgb), tag: "" };
+  // animated effect: preview a hue that drifts across the board
+  const x = KEYS.find(([, , rr, cc]) => rr === r && cc === c);
+  const hue = (lighting.effect === 2 ? r * 40 : c * 18 + (lighting.effect === 0 ? Math.abs(r - 2) * 20 : 0)) + phase;
+  return { bg: css(wheel(((hue % 255) + 255) % 255)), tag: "fx" };
+}
+
+function render() {
+  const lit = mode === "lighting";
+  $("board").classList.toggle("lit", lit);
+  for (const [name, , r, c] of KEYS) {
+    const el = keyEls[r + "," + c];
+    el.classList.remove("pressed", "trns");
+    el.style.background = "";
+    if (!keymap.length) { el.innerHTML = name; el.classList.remove("sel"); continue; }
+    if (mode === "tester") {
+      let code = keymap[testerLayer]?.[r]?.[c] ?? keymap[0][r][c];
+      if (code === 1) code = keymap[0][r][c];
+      el.innerHTML = label(code) || "&nbsp;"; el.classList.remove("sel"); continue;
+    }
+    const code = keymap[layer][r][c];
+    if (lit) {
+      const L = keyLight(layer, r, c);
+      el.style.background = L.bg;
+      el.innerHTML = (label(code === 1 ? keymap[0][r][c] : code) || "&nbsp;") + (L.tag ? '<span class="tag">' + L.tag + "</span>" : "");
+      el.classList.toggle("sel", lightSel.has(r + "," + c));
+    } else {
+      el.classList.toggle("trns", code === 1);
+      el.innerHTML = label(code) || "&nbsp;";
+      el.classList.toggle("sel", pickingBoot ? bootPick.includes((r << 4) | c) : (!!selected && selected[0] === r && selected[1] === c));
+    }
+  }
+}
+
+function clickKey(r, c, ev) {
+  if (mode === "tester") return;
+  if (mode === "lighting") {
+    const k = r + "," + c;
+    if (lightSel.has(k)) lightSel.delete(k); else lightSel.add(k);
+    render(); renderKeyColour();
+    return;
+  }
+  if (pickingBoot) {
+    const k = (r << 4) | c, i = bootPick.indexOf(k);
+    if (i >= 0) bootPick.splice(i, 1); else if (bootPick.length < 3) bootPick.push(k);
+    render(); renderFailsafe();
+    return;
+  }
+  selected = (selected && selected[0] === r && selected[1] === c) ? null : [r, c];
+  render();
+}
+
+// ---- modes and layer tabs ---------------------------------------------------------
+function setMode(m) {
+  mode = m; testerOn = false;
+  for (const b of document.querySelectorAll(".mode")) b.classList.toggle("on", b.dataset.mode === m);
+  $("keymap-view").hidden = m !== "keymap";
+  $("lighting-view").hidden = m !== "lighting";
+  $("tabs").hidden = m === "tester";
+  $("hint").textContent = m === "keymap" ? "Click a key, then pick what it should do. Changes apply immediately and are saved to the keyboard."
+    : m === "lighting" ? "Click keys to select them (click again to deselect), then pick their colour below. Keys show the colour the keyboard draws."
+    : "Press keys on the keyboard: each lights up as the firmware sees it.";
+  buildTabs(); render();
+  if (m === "lighting") { renderKeyColour(); renderGlobalLight(); }
+  if (m === "tester") startTester();
+}
+
+function buildTabs() {
+  const tabs = $("tabs"); tabs.innerHTML = "";
+  const n = info ? info.layers : 4;
+  for (let l = 0; l < n; l++) {
+    const b = document.createElement("button");
+    b.textContent = layerName(l); b.className = l === layer ? "on" : "";
+    b.onclick = () => { layer = l; buildTabs(); render(); if (mode === "lighting") { renderKeyColour(); renderGlobalLight(); } };
+    tabs.appendChild(b);
+  }
+}
+
+// ---- keymap: picker with search ------------------------------------------------
+function matches(q, groupName, code, label, name, words) {
+  if (!q) return true;
+  const hay = (label + " " + (name || "") + " " + (words || "") + " " + groupName).toLowerCase();
+  if (q.split(/\s+/).every(t => hay.includes(t))) return true;
+  const hex = q.replace(/^0x/, "");
+  if (/^[0-9a-f]+$/.test(hex) && parseInt(hex, 16) === code) return true;
+  if (/^\d+$/.test(q) && parseInt(q, 10) === code) return true;
+  return false;
+}
+
+function buildPicker() {
+  const p = $("picker"); p.innerHTML = "";
+  const search = document.createElement("input");
+  search.id = "search"; search.type = "search"; search.placeholder = "Search keys: name, keycode (0x2c or 44) or category…";
+  search.oninput = () => renderPicker(search.value);
+  p.appendChild(search);
+  const list = document.createElement("div"); list.id = "palette"; p.appendChild(list);
+  renderPicker("");
+}
+
+function renderPicker(query) {
+  const q = query.trim().toLowerCase();
+  const list = $("palette"); list.innerHTML = "";
+  let shown = 0;
+  for (const [name, entries] of GROUPS) {
+    const hits = entries.filter(([code, l, n, w]) => matches(q, name, code, l, n, w));
+    if (!hits.length) continue;
+    const g = document.createElement("div"); g.className = "group";
+    g.innerHTML = "<h3>" + name + "</h3>";
+    const chips = document.createElement("div"); chips.className = "chips";
+    for (const [code, l, n] of hits) {
+      const b = document.createElement("button"); b.textContent = l;
+      b.title = (n ? n + " · " : "") + "0x" + code.toString(16).padStart(4, "0");
+      b.onclick = () => assign(code);
+      chips.appendChild(b); shown++;
+    }
+    g.appendChild(chips); list.appendChild(g);
+  }
+  if (!shown) list.innerHTML = '<p class="empty">No keys match "' + query.replace(/[<>&"]/g, "") + '".</p>';
+}
+
+async function assign(code) {
+  if (!device) return setStatus("Connect the keyboard first", true);
+  if (!selected) return setStatus("Click a key on the board first", true);
+  const [r, c] = selected;
+  try {
+    await request(CMD.SET_KEYCODE, layer, r, c, code & 0xff, code >> 8);
+    keymap[layer][r][c] = code;
+    render(); scheduleSave();
+    setStatus("Set " + keyEls[r + "," + c].dataset.name + " → " + (label(code) || "None"));
+  } catch (e) { setStatus("Couldn't set key: " + e.message, true); }
+}
+
+// keymap and key colours share one flash store: one SAVE after a burst of edits
+function scheduleSave() {
+  setSave("Unsaved changes…");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try { setSave("Saving…"); await request(CMD.SAVE); setSave("Saved to keyboard ✓"); }
+    catch (e) { setSave("Save failed: " + e.message); }
+  }, 700);
+}
+
+// ---- keymap: failsafe combo -------------------------------------------------------
+function renderFailsafe() {
+  const used = bootKeys.filter(k => k !== 0xff);
+  const custom = used.length ? used.map(posName).join(" + ") : "none";
+  $("failsafe").innerHTML =
+    "<h3>Failsafe combo</h3>" +
+    "<p>Hold while plugging in to start the keyboard in flashing mode. <b>Esc</b> and <b>S + M + K</b> always work. " +
+    "Custom combo: <b>" + (pickingBoot ? (bootPick.map(posName).join(" + ") || "click up to 3 keys…") : custom) + "</b></p>";
+  const row = document.createElement("div"); row.className = "row";
+  const mk = (text, fn, primary) => { const b = document.createElement("button"); b.textContent = text; b.onclick = fn; if (primary) b.className = "primary"; row.appendChild(b); };
+  if (pickingBoot) {
+    mk("Save combo", saveBootKeys, true);
+    mk("Cancel", () => { pickingBoot = false; bootPick = []; render(); renderFailsafe(); });
+  } else {
+    mk("Choose custom combo", () => { pickingBoot = true; bootPick = []; selected = null; render(); renderFailsafe(); });
+    if (used.length) mk("Remove custom combo", () => sendBootKeys([0xff, 0xff, 0xff]));
+  }
+  $("failsafe").appendChild(row);
+}
+
+async function sendBootKeys(keys) {
+  if (!device) return setStatus("Connect the keyboard first", true);
+  try {
+    await request(CMD.SET_BOOT_KEYS, ...keys);
+    bootKeys = keys; pickingBoot = false; bootPick = [];
+    setStatus(keys.every(k => k === 0xff) ? "Custom failsafe combo removed" : "Failsafe combo saved: " + keys.filter(k => k !== 0xff).map(posName).join(" + "));
+  } catch (e) { setStatus("Couldn't save the combo: " + e.message, true); }
+  render(); renderFailsafe();
+}
+
+function saveBootKeys() {
+  if (!bootPick.length) return setStatus("Click 1 to 3 keys first", true);
+  sendBootKeys(bootPick.concat([0xff, 0xff, 0xff]).slice(0, 3));
+}
+
+// ---- lighting: selected keys' colour --------------------------------------------
+let pickRgb = [122, 0, 255];
+
+function renderKeyColour() {
+  const el = $("key-colour");
+  const n = lightSel.size;
+  const autoText = layer === 0 ? "Follow effect" : "Auto (layer highlight)";
+  el.innerHTML = "<h3>Key colour <small>" + layerName(layer) + " · " + (n ? n + " key" + (n > 1 ? "s" : "") + " selected" : "select keys on the board") + "</small></h3>";
+
+  const sel = document.createElement("div"); sel.className = "row";
+  const mk = (parent, text, fn, cls) => { const b = document.createElement("button"); b.textContent = text; b.onclick = fn; if (cls) b.className = cls; parent.appendChild(b); return b; };
+  mk(sel, "Select all", () => { lightSel = new Set(KEYS.map(([, , r, c]) => r + "," + c)); render(); renderKeyColour(); });
+  mk(sel, "Select none", () => { lightSel.clear(); render(); renderKeyColour(); });
+  if (layer > 0) mk(sel, "Select keys used on this layer", () => {
+    lightSel = new Set(KEYS.filter(([, , r, c]) => { const k = keymap[layer]?.[r]?.[c]; return k !== 1 && k !== 0; }).map(([, , r, c]) => r + "," + c));
+    render(); renderKeyColour();
+  });
+  el.appendChild(sel);
+
+  // picking a single key loads its current colour into the picker
+  if (n === 1) {
+    const [r, c] = [...lightSel][0].split(",").map(Number);
+    const k = keyColors[layer]?.[r]?.[c];
+    if (k && !k.auto) pickRgb = k.rgb.slice();
+  }
+  const wrap = document.createElement("div"); wrap.className = "slider";
+  wrap.innerHTML = "<h3>Colour</h3>";
+  el.appendChild(wrap);
+  rgbPicker(wrap, pickRgb, v => { pickRgb = v; }, v => { pickRgb = v; });
+
+  const apply = document.createElement("div"); apply.className = "row";
+  mk(apply, "Apply colour", () => applyColour(pickRgb), "primary").disabled = !n;
+  mk(apply, "White", () => applyColour([255, 255, 255])).disabled = !n;
+  mk(apply, "Off", () => applyColour([0, 0, 0])).disabled = !n;
+  mk(apply, autoText, () => applyColour(null)).disabled = !n;
+  el.appendChild(apply);
+}
+
+// rgb = [r, g, b], or null for Auto
+async function applyColour(rgb) {
+  if (!device) return setStatus("Connect the keyboard first", true);
+  const keys = [...lightSel].map(k => k.split(",").map(Number));
+  try {
+    for (const [r, c] of keys) {
+      if (rgb) {
+        await request(CMD.SET_KEY_RGB, (layer << 4) | r, c, ...rgb);
+        keyColors[layer][r][c] = { auto: false, rgb: rgb.slice() };
+      } else {
+        await request(CMD.SET_KEY_AUTO, layer, r, c);
+        keyColors[layer][r][c].auto = true;
+      }
+    }
+    render(); scheduleSave();
+    const what = !rgb ? "Auto" : isBlack(rgb) ? "off" : hex(rgb).toUpperCase();
+    setStatus(keys.length + " key" + (keys.length > 1 ? "s" : "") + " on " + layerName(layer).toLowerCase() + " set to " + what);
+  } catch (e) { setStatus("Couldn't set colour: " + e.message, true); }
+}
+
+// ---- lighting: effect, brightness, speed, layer highlight ------------------------
+let lightTimer = null, lightPending = false;
+
+function pushLighting(final) {
+  if (!device) return setStatus("Connect the keyboard first", true);
+  lightPending = true;
+  const send = async () => {
+    lightTimer = null; if (!lightPending) return; lightPending = false;
+    const l = lighting;
+    try { await request(CMD.SET_LIGHTING, l.effect, l.brightness, l.speed); setSave("Saved to keyboard ✓"); }
+    catch (e) { setStatus("Couldn't set lighting: " + e.message, true); }
+  };
+  if (final) { clearTimeout(lightTimer); send(); }
+  else if (!lightTimer) lightTimer = setTimeout(send, 250);
+}
+
+// generic throttle for live colour drags: at most ~4 sends a second, plus the final one
+function throttled(sendFn) {
+  let timer = null, pending = null;
+  const flush = async () => { timer = null; if (!pending) return; const v = pending; pending = null; await sendFn(v); };
+  return (value, final) => {
+    pending = value;
+    if (final) { clearTimeout(timer); flush(); }
+    else if (!timer) timer = setTimeout(flush, 250);
+  };
+}
+
+const pushSolid = throttled(async rgb => {
+  if (!device) return;
+  try { await request(CMD.SET_SOLID_RGB, ...rgb); setSave("Saved to keyboard ✓"); }
+  catch (e) { setStatus("Couldn't set solid colour: " + e.message, true); }
+});
+
+const pushLayerColour = throttled(async ([l, on, rgb]) => {
+  if (!device) return;
+  try { await request(CMD.SET_LAYER_COLOR, l, on ? 1 : 0, ...rgb); setSave("Saved to keyboard ✓"); }
+  catch (e) { setStatus("Couldn't set layer colour: " + e.message, true); }
+});
+
+function slider(parent, labelText, value, min, max, onInput, onChange, opts = {}) {
+  const wrap = document.createElement("div"); wrap.className = "slider";
+  wrap.innerHTML = "<h3>" + labelText + "</h3>";
+  const line = document.createElement("div"); line.className = "sline";
+  const input = document.createElement("input"); input.type = "range"; input.min = min; input.max = max; input.value = value;
+  if (opts.hue) input.className = "hue";
+  if (opts.disabled) input.disabled = true;
+  const val = document.createElement("span"); val.className = opts.swatch ? "swatch" : "val";
+  const show = () => { if (opts.swatch) val.style.background = input.disabled ? "transparent" : css(wheel(+input.value)); else val.textContent = opts.fmt ? opts.fmt(+input.value) : input.value; };
+  input.oninput = () => { onInput(+input.value); show(); };
+  input.onchange = () => onChange(+input.value);
+  line.append(input, val); wrap.appendChild(line); parent.appendChild(wrap); show();
+  return { input, show };
+}
+
+function renderGlobalLight() {
+  const el = $("global-light"); el.innerHTML = "";
+  const cols = document.createElement("div"); cols.className = "cols";
+  const left = document.createElement("div"), right = document.createElement("div");
+
+  left.innerHTML = "<h3>Effect <small>for base-layer keys set to Follow effect</small></h3>";
+  const fx = document.createElement("div"); fx.className = "chips";
+  EFFECTS.forEach((name, i) => {
+    const b = document.createElement("button"); b.textContent = name;
+    if (lighting.effect === i) b.className = "primary";
+    b.onclick = () => { lighting.effect = i; renderGlobalLight(); render(); pushLighting(true); };
+    fx.appendChild(b);
+  });
+  left.appendChild(fx);
+  const sc = document.createElement("div"); sc.className = "slider";
+  sc.innerHTML = "<h3>Solid colour <small>used by the Solid colour effect</small></h3>";
+  left.appendChild(sc);
+  rgbPicker(sc, solidRgb, v => { solidRgb = v; render(); pushSolid(v, false); }, v => { solidRgb = v; render(); pushSolid(v, true); });
+
+  slider(right, "Brightness <small>all keys</small>", lighting.brightness, 0, 255, v => { lighting.brightness = v; pushLighting(false); }, () => pushLighting(true), { fmt: v => Math.round(v / 2.55) + "%" });
+  slider(right, "Speed <small>animated effects</small>", lighting.speed, 1, 16, v => { lighting.speed = v; pushLighting(false); }, () => pushLighting(true));
+  if (layer > 0) {
+    const L = layer, hl = layerHl[L];
+    const h = document.createElement("div"); h.className = "slider";
+    h.innerHTML = "<h3>Layer highlight <small>while " + layerName(L).toLowerCase() + " is held, its Auto keys light in this colour and keys it doesn't use go dark</small></h3>";
+    const box = document.createElement("label"); box.className = "check";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = hl.on;
+    box.append(cb, "Highlight this layer (off: the base layer's colours show through)"); h.appendChild(box); right.appendChild(h);
+    const pk = document.createElement("div"); pk.className = hl.on ? "" : "disabled"; right.appendChild(pk);
+    rgbPicker(pk, hl.rgb, v => { hl.rgb = v; render(); pushLayerColour([L, hl.on, v], false); }, v => { hl.rgb = v; render(); pushLayerColour([L, hl.on, v], true); });
+    cb.onchange = () => { hl.on = cb.checked; pk.className = hl.on ? "" : "disabled"; render(); pushLayerColour([L, hl.on, hl.rgb], true); };
+  }
+  cols.append(left, right); el.appendChild(cols);
+}
+
+// ---- tester -----------------------------------------------------------------------
+async function startTester() {
+  if (testerOn || !device) return;
+  testerOn = true;
+  while (testerOn && mode === "tester" && device) {
+    try {
+      const down = new Set();
+      let layerNow = 0;
+      for (let c = 0; c < info.cols; c += 2) {
+        const m = await request(CMD.GET_MATRIX, c);
+        layerNow = m[2];
+        for (let r = 0; r < info.rows; r++) {
+          if (m[0] & (1 << r)) down.add(r + "," + c);
+          if (m[1] & (1 << r)) down.add(r + "," + (c + 1));
+        }
+      }
+      if (layerNow !== testerLayer && layerNow < info.layers) {
+        testerLayer = layerNow; render();
+        $("hint").textContent = "Press keys on the keyboard: each lights up as the firmware sees it. Showing: " + layerName(testerLayer).toLowerCase();
+      }
+      for (const [k, el] of Object.entries(keyEls)) el.classList.toggle("pressed", down.has(k));
+    } catch (e) { setStatus("Tester: " + e.message, true); break; }
+    await sleep(30);
+  }
+  testerOn = false;
+}
+
+// ---- loading + connection ----------------------------------------------------------
+async function loadAll() {
+  const d = await request(CMD.GET_INFO);
+  info = { ver: d[0], rows: d[1], cols: d[2], layers: d[3] };
+  keymap = []; keyColors = [];
+  for (let l = 0; l < info.layers; l++) {
+    const km = [], kcol = [];
+    for (let r = 0; r < info.rows; r++) {
+      const row = [], crow = [];
+      for (let c = 0; c < info.cols; c += 2) {
+        const k = await request(CMD.GET_KEYCODES, l, r, c);
+        row.push(k[0] | (k[1] << 8));
+        if (c + 1 < info.cols) row.push(k[2] | (k[3] << 8));
+      }
+      for (let c = 0; c < info.cols; c++) {
+        const k = await request(CMD.GET_KEY_RGB, l, r, c);
+        crow.push({ auto: k[3] === 1, rgb: [k[0], k[1], k[2]] });
+      }
+      km.push(row); kcol.push(crow);
+    }
+    keymap.push(km); keyColors.push(kcol);
+    setStatus("Reading keyboard… layer " + (l + 1) + "/" + info.layers);
+  }
+  try { const b = await request(CMD.GET_BOOT_KEYS); bootKeys = [b[0], b[1], b[2]]; } catch (e) {}
+  try { const g = await request(CMD.GET_LIGHTING); lighting = { effect: g[0], brightness: g[1], speed: g[2] }; } catch (e) {}
+  try { const s = await request(CMD.GET_SOLID_RGB); solidRgb = [s[0], s[1], s[2]]; } catch (e) {}
+  for (let l = 1; l < info.layers; l++) {
+    try { const h = await request(CMD.GET_LAYER_COLOR, l); layerHl[l] = { on: h[0] === 1, rgb: [h[1], h[2], h[3]] }; } catch (e) {}
+  }
+}
+
+async function attach(dev) {
+  try {
+    if (!dev.opened) await dev.open();
+    device = dev;
+    setStatus("Connected, reading keyboard…");
+    await loadAll();
+    setStatus("Connected: " + (dev.productName || "keyboard") + " · " + info.layers + " layers");
+    $("connect").textContent = "Reconnect";
+    renderFailsafe(); setMode(mode);
+  } catch (e) { device = null; setStatus("Connection failed: " + e.message, true); }
+}
+
+async function connect() {
+  if (new URLSearchParams(location.search).has("mock")) return attach(Object.assign(new MockDevice(), { opened: true, productName: "Mock GM610" }));
+  try {
+    const devs = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID, usagePage: USAGE_PAGE, usage: USAGE }] });
+    if (!devs.length) return setStatus("No keyboard chosen");
+    await attach(devs[0]);
+  } catch (e) { setStatus("Connection failed: " + e.message, true); }
+}
+
+$("connect").onclick = connect;
+for (const b of document.querySelectorAll(".mode")) b.onclick = () => setMode(b.dataset.mode);
+$("reset-keymap").onclick = async () => {
+  if (!device) return setStatus("Connect the keyboard first", true);
+  if (!confirm("Reset every layer's keymap to the firmware's built-in one? (Key colours are kept.)")) return;
+  try { await request(CMD.RESET); await loadAll(); render(); setSave("Saved to keyboard ✓"); setStatus("Keymap reset to defaults"); }
+  catch (e) { setStatus("Reset failed: " + e.message, true); }
+};
+$("reset-colours").onclick = async () => {
+  if (!device) return setStatus("Connect the keyboard first", true);
+  if (!confirm("Set every key on every layer back to Auto colour?")) return;
+  try { await request(CMD.RESET_COLORS); await loadAll(); render(); setSave("Saved to keyboard ✓"); setStatus("Key colours reset"); }
+  catch (e) { setStatus("Reset failed: " + e.message, true); }
+};
+
+// slow drift for the animated-effect preview on the Lighting board
+setInterval(() => { if (mode === "lighting" && lighting.effect < FX_SOLID) { phase = (phase + 3) % 255; render(); } }, 120);
+
+buildBoard(); buildPicker(); renderFailsafe(); setMode("keymap");
+const mock = new URLSearchParams(location.search).has("mock");
+if (mock) connect();
+else if (!("hid" in navigator)) { $("nohid").hidden = false; $("connect").disabled = true; setStatus("WebHID unavailable", true); }
+else {
+  navigator.hid.addEventListener("disconnect", e => { if (e.device === device) { device = null; testerOn = false; setStatus("Keyboard disconnected", true); } });
+  navigator.hid.getDevices().then(ds => {
+    const d = ds.find(x => x.vendorId === VID && x.productId === PID && x.collections.some(c => c.usagePage === USAGE_PAGE && c.usage === USAGE));
+    if (d) attach(d);
+  });
+}
+</script>
+</body>
+</html>

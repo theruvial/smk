@@ -79,17 +79,17 @@
 #define LED_PWM_C12 PWM12
 #define LED_PWM_C13 PWM11
 
-// RGB row sinks, from the stock firmware's row-driver routine (0x6132): three
-// groups of six pins, one per colour. Same pins as the NuPhy Air60 except the
-// Ctrl row's red and blue are swapped, and a sixth row (P4.1/P6.0/P4.0) that
-// the GM610 has no LEDs on, held low. If a colour comes out wrong, swap here.
+// RGB row sinks, mapped on the board with a pin-finder build (each sink raised
+// alone, filmed) on 2026-11-14. Green for rows 1-2 is P6.2/P6.3 (BYK916 pins 3/4,
+// "DR2_G"/"DR3_G" on the pinout); on this unit those pins light nothing, likely a
+// lifted/bridged pin next to pin 2. P4.0/P4.1/P6.0 drive no LEDs (held low).
 #define RGB_R0R P0_4
 #define RGB_R0G P6_1
 #define RGB_R0B P0_3
-#define RGB_R1R P6_7
+#define RGB_R1R P0_2
 #define RGB_R1G P6_2
 #define RGB_R1B P6_6
-#define RGB_R2R P0_2
+#define RGB_R2R P6_7
 #define RGB_R2G P6_3
 #define RGB_R2B P5_7
 #define RGB_R3R P4_5
@@ -138,6 +138,9 @@ enum custom_keycodes {
 
     KB_SAFE_RANGE,
 };
+
+// The live keymap editor may assign the custom codes above (SAFE_RANGE..KB_SAFE_RANGE).
+#define DYNAMIC_KEYMAP_CUSTOM_END KB_SAFE_RANGE
 
 // Failsafe: hold Esc, or S + M + K, while plugging in to jump to the stock ISP
 // bootloader, so sinowisp can reflash even if a build's own USB is broken.

@@ -22,8 +22,9 @@ OEP0IF = 0x10
 STUB = 0x9100  # LCALL _config_task ; LJMP SLED_END
 
 GET_INFO, GET_KEYCODES, SET_KEYCODE, GET_MATRIX = 0x01, 0x02, 0x03, 0x05
+GET_BOOT_KEYS, SET_BOOT_KEYS = 0x07, 0x08
 OK, ERR_CMD, ERR_RANGE, ERR_KEYCODE, ERR_NO_KEY = 0, 1, 2, 3, 4
-QK_USER = 0x7E40
+UNKNOWN_CUSTOM = 0x7F00  # past QK_USER and past any board's custom range
 
 
 def setUpModule():
@@ -48,8 +49,12 @@ def get_report_config(length=1 + PAYLOAD):
 class Session:
     """EP0 driver (same model as test_usb_ep0.Session) plus a way to run the main-loop task."""
 
-    def __init__(self):
+    def __init__(self, rom_patch=None):
         self.u = UcsimSession(SIM.firmware)
+        for addr, data in (rom_patch or {}).items():  # planted before boot, e.g. an old keymap store
+            for off in range(0, len(data), 48):
+                chunk = data[off:off + 48]
+                self.u.cmd(f"set mem rom 0x{addr + off:x} " + " ".join(f"0x{b:02x}" for b in chunk))
         for c in SIM._boot_to_post_init():
             self.u.cmd(c)
         self.u.brk(SIM.SLED_END)
@@ -148,8 +153,98 @@ class TestConfigCommands(unittest.TestCase):
         self.assertEqual(s.responses()[-1][:3], [SET_KEYCODE, 3, ERR_RANGE], s.output)
 
     def test_custom_keycode_rejected(self):
-        s = Session().command(SET_KEYCODE, 4, 0, 0, 0, QK_USER & 0xFF, QK_USER >> 8).get().finish()
+        s = Session().command(SET_KEYCODE, 4, 0, 0, 0, UNKNOWN_CUSTOM & 0xFF, UNKNOWN_CUSTOM >> 8).get().finish()
         self.assertEqual(s.responses()[-1][:3], [SET_KEYCODE, 4, ERR_KEYCODE], s.output)
+
+    def test_boot_keys_round_trip(self):
+        # (0,1) and (1,1): "1" and "Q" on the GM610; third slot unused
+        s = (Session()
+             .command(SET_BOOT_KEYS, 7, 0x01, 0x11, 0xFF).get()
+             .command(GET_BOOT_KEYS, 8).get()
+             .finish())
+        set_resp, get_resp = s.responses()[-2:]
+        self.assertEqual(set_resp[:3], [SET_BOOT_KEYS, 7, OK], s.output)
+        self.assertEqual(get_resp[:6], [GET_BOOT_KEYS, 8, OK, 0x01, 0x11, 0xFF], s.output)
+
+    def test_lighting_round_trip(self):
+        # effect 1, brightness 200, speed 5 are in range for every LED board
+        s = (Session()
+             .command(0x0A, 11, 1, 200, 5).get()
+             .command(0x09, 12).get()
+             .finish())
+        set_resp, get_resp = s.responses()[-2:]
+        self.assertEqual(set_resp[:3], [0x0A, 11, OK], s.output)
+        self.assertEqual(get_resp[:6], [0x09, 12, OK, 1, 200, 5], s.output)
+
+    def test_key_rgb_round_trip(self):
+        # layer 1, (0,0) := rgb(10, 20, 30); then it reads back non-auto. (0,1) stays auto.
+        s = (Session()
+             .command(0x0E, 13, (1 << 4) | 0, 0, 10, 20, 30).get()
+             .command(0x0D, 14, 1, 0, 0).get()
+             .command(0x0D, 15, 1, 0, 1).get()
+             .finish())
+        set_resp, get0, get1 = s.responses()[-3:]
+        self.assertEqual(set_resp[:3], [0x0E, 13, OK], s.output)
+        self.assertEqual(get0[:7], [0x0D, 14, OK, 10, 20, 30, 0], s.output)
+        self.assertEqual(get1[6], 1, s.output)  # auto
+
+    def test_key_back_to_auto(self):
+        s = (Session()
+             .command(0x0E, 16, (2 << 4) | 1, 1, 255, 0, 0).get()
+             .command(0x10, 17, 2, 1, 1).get()
+             .command(0x0D, 18, 2, 1, 1).get()
+             .finish())
+        self.assertEqual(s.responses()[-1][6], 1, s.output)
+
+    def test_v2_store_migrates_to_rgb(self):
+        # a v2 store (keymap + one colour index per key) at FLASH_KEYMAP_ADDR, as a
+        # keyboard flashed before the RGB change has it; it must load and convert
+        syms = load_symbols(Path(SIM.firmware).with_suffix(".map"))
+        rows, cols, layers = 5, 14, 4
+        keys = rows * cols * layers
+        keymap = bytes(keys * 2)                      # all KC_NO: contents don't matter here
+        idx = bytearray([0xFF] * keys)                # auto everywhere...
+        idx[(1 * rows + 0) * cols + 0] = 85           # layer 1 (0,0): wheel 85 = pure blue
+        idx[(1 * rows + 0) * cols + 1] = 0xFE         # layer 1 (0,1): off
+        idx[(1 * rows + 0) * cols + 2] = 0xFD         # layer 1 (0,2): white
+        payload = keymap + bytes(idx)
+        s16 = sum(payload) & 0xFFFF
+        store = bytes([ord("D"), ord("K"), 2, rows, cols, layers]) + payload + bytes([s16 & 0xFF, s16 >> 8])
+        addr = syms.get("FLASH_KEYMAP_ADDR") or 0xE600
+        s = (Session({addr: store})
+             .command(0x0D, 30, 1, 0, 0).get()
+             .command(0x0D, 31, 1, 0, 1).get()
+             .command(0x0D, 32, 1, 0, 2).get()
+             .command(0x0D, 33, 1, 0, 3).get()
+             .finish())
+        blue, off, white, auto = s.responses()[-4:]
+        self.assertEqual(blue[3:7], [0, 0, 255, 0], s.output)
+        self.assertEqual(off[3:7], [0, 0, 0, 0], s.output)
+        self.assertEqual(white[3:7], [255, 255, 255, 0], s.output)
+        self.assertEqual(auto[6], 1, s.output)
+
+    def test_solid_and_layer_rgb(self):
+        s = (Session()
+             .command(0x12, 19, 1, 2, 3).get()
+             .command(0x11, 20).get()
+             .command(0x0C, 21, 2, 1, 7, 8, 9).get()
+             .command(0x0B, 22, 2).get()
+             .finish())
+        solid, layer = s.responses()[-3], s.responses()[-1]
+        self.assertEqual(solid[:6], [0x11, 20, OK, 1, 2, 3], s.output)
+        self.assertEqual(layer[:7], [0x0B, 22, OK, 1, 7, 8, 9], s.output)
+
+    def test_base_layer_has_no_highlight(self):
+        s = Session().command(0x0B, 23, 0).get().finish()
+        self.assertEqual(s.responses()[-1][:3], [0x0B, 23, ERR_RANGE], s.output)
+
+    def test_boot_keys_duplicates_rejected(self):
+        s = Session().command(SET_BOOT_KEYS, 9, 0x01, 0x01, 0xFF).get().finish()
+        self.assertEqual(s.responses()[-1][:3], [SET_BOOT_KEYS, 9, ERR_RANGE], s.output)
+
+    def test_boot_keys_out_of_range_rejected(self):
+        s = Session().command(SET_BOOT_KEYS, 10, 0x9F, 0xFF, 0xFF).get().finish()
+        self.assertEqual(s.responses()[-1][:3], [SET_BOOT_KEYS, 10, ERR_RANGE], s.output)
 
     def test_unknown_command_rejected(self):
         s = Session().command(0x7F, 5).get().finish()

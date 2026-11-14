@@ -35,8 +35,10 @@ keyboards += {
             'led_subframe_us' : '150', # needs USB at high IRQ priority (user_init.c)
             # BK3632 Bluetooth / 2.4 GHz (stage 3)
             'wireless' : 'bk3632',
-            # Keymap editable live from tools/configurator (stage 4)
-            # 'dynamic_keymap_layers' : '4',
+            # Keymap editable live from tools/configurator
+            'dynamic_keymap_layers' : '4',
+            # keymap + RGB per key per layer: 1435 bytes, so a 3-sector store
+            'dynamic_keymap_sectors' : '3',
         },
     },
 }

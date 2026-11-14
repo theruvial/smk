@@ -34,14 +34,64 @@ static bool                      mode_applied;
 
 #define STATUS_FRAMES 50 // ~2 s
 
-static bool boot_chord_held(void)
+static bool key_down(uint8_t row, uint8_t col)
 {
-    const bool esc = (matrix[BOOT_KEY_COL] & (1 << BOOT_KEY_ROW)) != 0;
-    const bool smk = (matrix[BOOT_CHORD_S_COL] & (1 << 2)) && (matrix[BOOT_CHORD_M_COL] & (1 << 3)) && (matrix[BOOT_CHORD_K_COL] & (1 << 2));
-    return esc || smk;
+    return (matrix[col] & (1 << row)) != 0;
 }
 
-// Failsafe: Esc (or S + M + K) held while plugging in -> stock ISP bootloader, so sinowisp can
+// Custom combo from the configurator (user_settings.boot_keys). Settings aren't
+// restored yet when kb_init() runs, so it loads them itself; anything invalid
+// (no record, out of range, no keys set) counts as "no custom combo".
+static bool custom_loaded;
+static bool custom_valid;
+
+static bool custom_combo_held(void)
+{
+    if (!custom_valid) {
+        return false;
+    }
+    for (uint8_t i = 0; i < 3; i++) {
+        const uint8_t k = user_settings.boot_keys[i];
+        if (k != BOOT_KEY_NONE && !key_down(k >> 4, k & 0x0F)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void load_custom_combo(void)
+{
+    custom_loaded = true;
+    custom_valid  = false;
+    if (!settings_load()) {
+        return;
+    }
+    uint8_t used = 0;
+    for (uint8_t i = 0; i < 3; i++) {
+        const uint8_t k = user_settings.boot_keys[i];
+        if (k == BOOT_KEY_NONE) {
+            continue;
+        }
+        if ((k >> 4) >= MATRIX_ROWS || (k & 0x0F) >= MATRIX_COLS) {
+            return;
+        }
+        used++;
+    }
+    custom_valid = used > 0;
+}
+
+// Esc, S + M + K, or the custom combo: Esc and S+M+K always work as the backup.
+static bool boot_chord_held(void)
+{
+    const bool esc = key_down(BOOT_KEY_ROW, BOOT_KEY_COL);
+    const bool smk = key_down(2, BOOT_CHORD_S_COL) && key_down(3, BOOT_CHORD_M_COL) && key_down(2, BOOT_CHORD_K_COL);
+    if (!custom_loaded) {
+        load_custom_combo();
+    }
+    return esc || smk || custom_combo_held();
+}
+
+// Failsafe: Esc, S + M + K, or the custom combo held while plugging in -> stock ISP bootloader, so sinowisp can
 // reflash even a build whose own USB or later startup is broken. kb_init() runs right
 // after init() has started the matrix scan (tick ISR) and before RF/USB-wait, so this
 // depends on as little of the firmware as possible. Read from the raw matrix, so it
@@ -60,6 +110,65 @@ void kb_init()
 }
 
 void kb_update_switches() {}
+
+#ifdef GM610_PIN_FINDER
+#    include "tick.h"
+#    include "watchdog.h"
+#    include "indicators.h"
+#    include "gpio.h"
+// LED wiring probe: every column pulled low (LED conducts), then each candidate row
+// sink driven high alone for 1.5 s, with a 0.5 s dark gap, looping. Filmed, it shows
+// which pin lights which row/colour. USB stays serviced so sinowisp can reflash.
+static void finder_wait(uint16_t ms)
+{
+    while (ms--) {
+        watchdog_kick();
+        usb_task();
+        delay_ms(1);
+    }
+}
+
+static void finder_all_sinks_low(void)
+{
+    GPIO_LOW(0, RGB_P0_MASK);
+    GPIO_LOW(4, RGB_P4_MASK);
+    GPIO_LOW(5, RGB_P5_MASK);
+    GPIO_LOW(6, RGB_P6_MASK);
+}
+
+static void pin_finder(void)
+{
+    tick_pause();
+    indicators_pwm_disable();
+    // columns as plain GPIO outputs, all low
+    GPIO_OUTPUT(2, (uint8_t)(KB_C13_P2_1 | KB_C12_P2_2 | KB_C11_P2_3 | KB_C10_P2_4 | KB_C9_P2_5));
+    GPIO_OUTPUT(3, (uint8_t)(KB_C8_P3_0 | KB_C7_P3_1 | KB_C6_P3_2 | KB_C5_P3_3 | KB_C4_P3_4 | KB_C3_P3_5));
+    GPIO_OUTPUT(5, (uint8_t)(KB_C0_P5_0 | KB_C1_P5_1 | KB_C2_P5_2));
+    GPIO_LOW(2, (uint8_t)(KB_C13_P2_1 | KB_C12_P2_2 | KB_C11_P2_3 | KB_C10_P2_4 | KB_C9_P2_5));
+    GPIO_LOW(3, (uint8_t)(KB_C8_P3_0 | KB_C7_P3_1 | KB_C6_P3_2 | KB_C5_P3_3 | KB_C4_P3_4 | KB_C3_P3_5));
+    GPIO_LOW(5, (uint8_t)(KB_C0_P5_0 | KB_C1_P5_1 | KB_C2_P5_2));
+
+    while (1) {
+        finder_all_sinks_low();
+        finder_wait(3000); // long dark gap marks the start of each cycle
+        // order: P0.2 P0.3 P0.4 | P4.0 P4.1 P4.3 P4.4 P4.5 P4.6 | P5.7 | P6.0 .. P6.7
+        static __code const uint8_t port[18] = {0, 0, 0, 4, 4, 4, 4, 4, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6};
+        static __code const uint8_t bit[18]  = {2, 3, 4, 0, 1, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7};
+        for (uint8_t i = 0; i < 18; i++) {
+            const uint8_t m = (uint8_t)(1u << bit[i]);
+            switch (port[i]) {
+                case 0: P0 |= m; break;
+                case 4: P4 |= m; break;
+                case 5: P5 |= m; break;
+                default: P6 |= m; break;
+            }
+            finder_wait(1500);
+            finder_all_sinks_low();
+            finder_wait(500);
+        }
+    }
+}
+#endif
 
 static void show_status(void)
 {

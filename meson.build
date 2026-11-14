@@ -178,7 +178,7 @@ foreach keyboard, board : keyboards
             '-DFLASH_MARKER_ADDR=@0@u'.format(marker_addr),
         ]
         if dyn_layers != ''
-            keymap_store_size = 2 * spec['sector_size']
+            keymap_store_size = options.get('dynamic_keymap_sectors', '2').to_int() * spec['sector_size']
             code_end = settings_addr - keymap_store_size
             platform_cc_args += [
                 '-DDYNAMIC_KEYMAP_ENABLE=1',
