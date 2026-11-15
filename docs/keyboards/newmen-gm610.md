@@ -40,6 +40,40 @@ Compared with the stock firmware as it shipped on the author's unit:
 Not carried over from the stock firmware: its battery level and charging indicators. Its own lighting effects and Fn
 combos were not catalogued, so SMK's effects (from the Air60 firmware) and Fn layer are a different set.
 
+## What this fork adds on top of upstream SMK
+
+Upstream SMK ([karstx/smk](https://github.com/karstx/smk)) has a fixed keymap compiled into the firmware. This fork
+(branch `newmen-gm610`, about 3,500 added lines) adds, beyond the GM610 board port itself:
+
+**In the core, usable by any board that opts in with `dynamic_keymap_layers`:**
+
+- **Live keymap store.** The keymap lives in flash sectors below the settings sector and is edited at run time.
+  It also holds an RGB colour for every key on every layer. The store is versioned, and older versions migrate on load.
+- **Configuration protocol.** A vendor HID feature report (ID 8, 7-byte payload, polled over the control endpoint) with
+  commands for keycodes, key tester, boot keys, lighting, per-key and layer colours, and the sleep timer. The firmware
+  checks every value: key positions, keycode ranges, duplicate boot keys.
+- **Editor.** A WebHID page (`docs/editor/`) hosted on GitHub Pages, with a keycode search, palette, failsafe settings, lighting
+  manager and key tester, plus a mock keyboard for working on the page without hardware.
+- **Lighting manager.** Per-key RGB per layer, a solid-colour effect in any RGB, layer highlight colours, live
+  brightness, speed and effect control, and a reset to defaults. Colours go through the same store as the keymap.
+- **Layer stacking.** Reworked layer handling in `matrix.c`: stacked momentary layers, per-key resolution from the
+  highest active layer, and a cache so a release matches the press. The active layer is reported to the tester.
+- **Configurable failsafe.** Up to three extra keys checked at power-up alongside the built-in Esc and S+M+K combos,
+  stored in settings and set from the editor.
+- **Sleep timer.** An idle-minutes setting, counted in seconds from the board's LED frame rate, with the editor control.
+- **Settings.** The saved settings now carry the connection mode, boot keys, solid and layer colours, layer highlight
+  flags and the sleep time, within the 28-byte limit of the smallest settings store (the CIY X77's EEPROM).
+- **Build.** `dynamic_keymap_layers` and `dynamic_keymap_sectors` options reserve the flash for the store, and
+  `led_subframe_us` sets the LED refresh timing per board.
+- **Tests.** `tests/test_config.py` (19 tests) runs the protocol in the uCsim simulator: transport, validation, round
+  trips, migration from older stores, and the colours and sleep commands.
+- **Tools.** `tools/keep-settings.py` carries the saved store over a reflash.
+
+**In the GM610 board port (`src/keyboards/newmen-gm610/`):** a 5 x 14 matrix and per-key RGB driver with the measured
+sink map, Bluetooth with a key-selected, saved connection mode, status LEDs on the keys, battery sleep with key wake,
+and the failsafe at power-up. The USB interrupt runs at top priority, because the fast LED refresh otherwise starves
+enumeration.
+
 ## SMK Supported Features
 
 - [x] Key Scan
