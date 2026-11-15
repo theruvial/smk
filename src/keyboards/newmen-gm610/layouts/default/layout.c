@@ -51,7 +51,7 @@ const uint16_t keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      * ,-----------------------------------------------------------.
      * | ` | F1| F2| F3| F4| F5| F6| F7| F8| F9|F10|F11|F12|   Del |
      * |-----------------------------------------------------------|
-     * |USB  |BT1|BT2|BT3|2.4|   |   |   |   |   |   |   |   |     |
+     * |USB  |BT1|BT2|BT3|2.4|   |   |   |   |   |   |BFl|BOn|BOf  |
      * |-----------------------------------------------------------|
      * |      |   |   |   |   |   |   |   |   |   |   |   |        |
      * |-----------------------------------------------------------|
@@ -59,11 +59,12 @@ const uint16_t keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      * `-----------------------------------------------------------'
      * Failsafe: hold Esc (or S+M+K) while plugging in to start in the bootloader for reflashing.
      * USB/BT1-3/2.4 = connection (tap; hold a BT key ~3 s to pair)
+     * BFl/BOn/BOf = battery level on keys 1-7: flash / keep on / off
      * Br = brightness, Fx = lighting effect (last one is "off"), Sp = effect speed
      */
     [_FL] = LAYOUT_60(
         KC_GRV,  KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,   KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,  KC_F11,  KC_F12,  KC_DEL,
-        LNK_USB, LNK_BT1, LNK_BT2, LNK_BT3, LNK_24G, _______, _______, _______, _______, _______, _______, _______, _______, _______,
+        LNK_USB, LNK_BT1, LNK_BT2, LNK_BT3, LNK_24G, _______, _______, _______, _______, _______, _______, BAT_FL,  BAT_ON,  BAT_OFF,
         _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,          _______,
         _______, _______, _______, _______, BRI_DN,  BRI_UP,  FX_PREV, FX_NEXT, SPD_DN,  SPD_UP,  _______,                   _______,
         _______, _______, _______,                            _______,                   _______, _______,          _______, _______

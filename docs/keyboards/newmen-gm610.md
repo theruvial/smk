@@ -45,7 +45,8 @@ Compared with the stock firmware as it shipped on the author's unit:
 - **Open and testable.** Builds from source with SDCC and meson, and the USB stack and the editor protocol are covered by
   simulator tests.
 
-Not carried over from the stock firmware: its battery level and charging indicators. Its own lighting effects and Fn
+Not carried over from the stock firmware: its charging indicator. The battery level bar is new but its scale is unverified
+(see "Untested and broken"). Its own lighting effects and Fn
 combos were not catalogued, so SMK's effects (from the Air60 firmware) and Fn layer are a different set.
 
 ## What this fork adds on top of upstream SMK
@@ -90,6 +91,7 @@ enumeration.
 - [x] Settings persistence
 - [x] Live keymap editor (4 layers, WebHID): <https://theruvial.github.io/smk/editor/>
 - [x] Battery sleep (Bluetooth mode, wakes on a key)
+- [x] Battery level bar on keys 1-7 (Fn+[ show, Fn+] keep on, Fn+\ off; scale unverified, see below)
 - [x] Failsafe: hold Esc, or S+M+K, while plugging in (a custom combo can be set in the editor)
 - [ ] 2.4 GHz (untested, no dongle)
 
@@ -105,7 +107,7 @@ Bluetooth pairing and typing with one Windows laptop, the failsafe, and Bluetoot
 
 **Not implemented:**
 
-- Battery level and charging indicators. The battery state is not read, and the indicator setting is left off.
+- Charging indicator. No charge-status bit or pin has been identified.
 - The sixth LED row the stock firmware drives (P4.0, P4.1, P6.0). No LEDs hang off it on this board.
 
 **Untested:**
@@ -115,6 +117,11 @@ Bluetooth pairing and typing with one Windows laptop, the failsafe, and Bluetoot
 - Wired sleep, where the keyboard sleeps when the PC suspends the USB bus, and waking the PC with a key.
 - How the wake works. The sleep sequence copies the stock firmware's, and a key wakes it. Which pin INT4 listens on was
   never confirmed.
+- Battery level scale. The level comes from the Bluetooth chip's status byte (low 3 bits, 0-7) and the bar uses the Air60's
+  cut-offs (red 1 or below, green 6 or above). On the tested unit a full battery (100% per Windows) lit 5 keys, so the real
+  scale or a flag in the other status bits is not understood. Treat the bar as a rough guide. The stock firmware reads the
+  same status bytes and does not use the MCU's ADC. Whether the level is also reported to the host is up to the chip:
+  Windows showed a battery percentage for the paired keyboard.
 - Battery life. Nothing here measured the current drawn asleep or awake.
 - The editor outside Chrome on Windows. It uses WebHID, so it needs a Chromium browser (Chrome or Edge); Firefox and Safari don't have it.
 - Other units. The stock firmware revision can differ, the code options were never read (they need an ICP programmer),

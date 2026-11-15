@@ -140,6 +140,11 @@ enum custom_keycodes {
     SPD_UP,
     SPD_DN,
 
+    // battery level on the number row (Fn layer)
+    BAT_FL,  // show the level for a few seconds
+    BAT_ON,  // keep it showing (saved)
+    BAT_OFF, // stop (saved)
+
     KB_SAFE_RANGE,
 };
 
@@ -168,4 +173,8 @@ void indicators_brightness_up(void);
 void indicators_brightness_down(void);
 void indicators_speed_up(void);
 void indicators_speed_down(void);
+void indicators_battery_flash(void);
+void indicators_battery_on(void);
+void indicators_battery_off(void);
+void indicators_battery_set_valid(bool valid);
 void indicators_show_key(uint8_t row, uint8_t col, uint8_t r, uint8_t g, uint8_t b, bool blink, uint8_t frames);

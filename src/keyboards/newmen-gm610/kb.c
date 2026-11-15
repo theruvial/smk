@@ -34,6 +34,36 @@ static bool                      mode_applied;
 
 #define STATUS_FRAMES 50 // ~2 s
 
+// Battery level: the Bluetooth chip measures it and reports it in its status word, so
+// reading it is the same SPI poll the link supervisor makes. Try a few times, since a
+// chip that is busy answers with nothing.
+#ifdef RF_ENABLED
+#    define BATTERY_POLL_TICKS 4000u
+static bool battery_poll(void)
+{
+    for (uint8_t i = 0; i < 3; i++) {
+        if (rf_update_keyboard_state(&keyboard_state)) {
+            indicators_battery_set_valid(true);
+            return true;
+        }
+        delay_ms(10);
+    }
+    return false;
+}
+#endif
+
+static void battery_show(void)
+{
+#ifdef RF_ENABLED
+    if (battery_poll()) {
+        indicators_battery_flash();
+        return;
+    }
+#endif
+    // no reading: blink Esc white
+    indicators_show_key(0, 0, 255, 255, 255, true, STATUS_FRAMES);
+}
+
 static bool key_down(uint8_t row, uint8_t col)
 {
     return (matrix[col] & (1 << row)) != 0;
@@ -298,6 +328,23 @@ bool kb_process_record(uint16_t keycode, bool key_pressed)
             }
             return false;
 
+        case BAT_FL:
+            if (key_pressed) {
+                battery_show();
+            }
+            return false;
+        case BAT_ON:
+            if (key_pressed) {
+                indicators_battery_on();
+                battery_show();
+            }
+            return false;
+        case BAT_OFF:
+            if (key_pressed) {
+                indicators_battery_off();
+            }
+            return false;
+
         default:
             return true;
     }
@@ -338,6 +385,16 @@ void kb_send_extra(__xdata report_extra_t *report)
 
 void kb_update()
 {
+#ifdef RF_ENABLED
+    // keep the always-on bar fresh (the supervisor only polls in Bluetooth mode)
+    if (user_settings.battery_indicator_on) {
+        static uint16_t battery_ticks = BATTERY_POLL_TICKS - 200u; // first reading soon after boot
+        if (++battery_ticks >= BATTERY_POLL_TICKS) {
+            battery_ticks = 0;
+            battery_poll();
+        }
+    }
+#endif
 
     // settings are restored after kb_init(), so the saved mode is applied here
     if (!mode_applied) {

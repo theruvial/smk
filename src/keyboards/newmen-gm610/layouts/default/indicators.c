@@ -59,6 +59,15 @@ static uint8_t status_rgb[3];
 static bool    status_blink;
 static uint8_t status_frames;
 
+// Battery level (from the Bluetooth chip, 0..7) shown as a bar on the number row keys
+// 1-7, lit for a few seconds or kept on. Only drawn once a reading has arrived.
+#define BAT_FRAMES   100 // ~4 s
+#define BAT_BAR_ROW  0
+#define BAT_BAR_COL0 1
+#define BAT_BAR_LEN  7
+static uint8_t battery_frames;
+static bool    battery_valid;
+
 void        indicators_pwm_enable();
 void        indicators_pwm_disable();
 static void led_regen_one();
@@ -105,6 +114,9 @@ void indicators_validate_settings()
     }
     if (user_settings.conn_mode > 1) {
         user_settings.conn_mode = 1;
+    }
+    if (user_settings.battery_indicator_on > 1) {
+        user_settings.battery_indicator_on = 0;
     }
 }
 
@@ -181,6 +193,33 @@ void indicators_speed_down(void)
 }
 
 // frames: how long to show it (~40 ms per frame); 0 clears.
+void indicators_battery_flash(void)
+{
+    battery_frames = BAT_FRAMES;
+    render_dirty   = true;
+}
+
+void indicators_battery_on(void)
+{
+    user_settings.battery_indicator_on = 1;
+    settings_mark_dirty();
+    render_dirty = true;
+}
+
+void indicators_battery_off(void)
+{
+    user_settings.battery_indicator_on = 0;
+    battery_frames                     = 0;
+    settings_mark_dirty();
+    render_dirty = true;
+}
+
+void indicators_battery_set_valid(bool valid)
+{
+    battery_valid = valid;
+    render_dirty  = true;
+}
+
 void indicators_show_key(uint8_t row, uint8_t col, uint8_t r, uint8_t g, uint8_t b, bool blink, uint8_t frames)
 {
     status_row    = frames ? row : 0xFF;
@@ -293,6 +332,9 @@ bool indicators_update_step(keyboard_state_t *keyboard, uint8_t current_step)
         if (status_frames && --status_frames == 0) {
             status_row = 0xFF;
         }
+        if (battery_frames) {
+            battery_frames--;
+        }
         render_dirty = true;
     }
 
@@ -338,7 +380,25 @@ static void led_regen_one()
     const uint8_t layer = action_layer < 4 ? action_layer : 0;
     const bool    hl    = layer && ((user_settings.layer_hl >> layer) & 1u);
 
-    if (regen_row == status_row && regen_col == status_col && !(status_blink && (frame_ctr & 0x08))) {
+    const bool bat_bar = battery_valid && (battery_frames || user_settings.battery_indicator_on) && regen_row == BAT_BAR_ROW && regen_col >= BAT_BAR_COL0 &&
+                         regen_col < (uint8_t)(BAT_BAR_COL0 + BAT_BAR_LEN);
+
+    if (bat_bar) {
+        // keys 1..level lit (at least one); red when low, amber, green when nearly full; the rest dim
+        const uint8_t level = keyboard_state.battery_level < 1 ? 1 : keyboard_state.battery_level;
+        if ((uint8_t)(regen_col - BAT_BAR_COL0) < level) {
+            if (keyboard_state.low_power || level <= 1) {
+                rgb[0] = 255;
+            } else if (level >= 6) {
+                rgb[1] = 255;
+            } else {
+                rgb[0] = 255;
+                rgb[1] = 180;
+            }
+        } else {
+            rgb[0] = rgb[1] = rgb[2] = 24;
+        }
+    } else if (regen_row == status_row && regen_col == status_col && !(status_blink && (frame_ctr & 0x08))) {
         rgb[0] = status_rgb[0];
         rgb[1] = status_rgb[1];
         rgb[2] = status_rgb[2];
