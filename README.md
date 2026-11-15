@@ -26,6 +26,11 @@ SMK ships [its own ISP bootloader](docs/bootloader.md), which takes that failure
 | CIY X77 | SH68F89 / BYK816 | N/A | External 24Cxx EEPROM | [Details](docs/keyboards/ciy-x77.md) |
 | [Newmen GM610](https://www.amazon.com/dp/B08QV9D8WN) | SH68F90A / BYK916 | BT (BK3632) | Per-key RGB, live keymap editor, battery sleep. Partly untested, see Details | [Details](docs/keyboards/newmen-gm610.md) |
 
+> **Warning:** the Newmen GM610 port, the live keymap editor and the changes to the core behind them were vibe coded with
+> Claude (Anthropic's AI, through Claude Code) and tested on a single keyboard. Flashing firmware to your own hardware
+> can brick it. Back up your stock firmware first, and read the [GM610 notes](docs/keyboards/newmen-gm610.md) before
+> flashing. Use at your own risk.
+
 This fork also adds a live keymap and per-key lighting editor (WebHID, hosted on GitHub Pages) and the protocol behind it. [What it adds](docs/keyboards/newmen-gm610.md#what-this-fork-adds-on-top-of-upstream-smk).
 
 ## Programming Tools

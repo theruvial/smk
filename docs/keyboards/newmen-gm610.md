@@ -1,5 +1,13 @@
 # Newmen GM610
 
+> **Warning: AI-written firmware, use at your own risk.** The GM610 port and the live editor were vibe coded with
+> Claude (Anthropic's AI, through Claude Code). They were tested on one keyboard, and not everything was checked
+> (see [Untested and broken](#untested-and-broken)). Flashing firmware to your own hardware can leave it
+> unresponsive or permanently bricked. The stock bootloader is never overwritten, so a bad build usually can be undone
+> over USB with the [failsafe](#if-smk-doesnt-enumerate), but a build that doesn't start at all needs an ICP programmer
+> to recover. **Back up your stock firmware before you flash anything**, and don't flash it if you can't afford to
+> lose the keyboard. Nobody here is responsible if it breaks.
+
 Developed and tested on one unit of the [Newmen GM610 wireless mechanical keyboard](https://www.amazon.com/dp/B08QV9D8WN) (PCB `K948 US BYK916 V1.1`).
 Everything here was checked on that unit only. See [Untested and broken](#untested-and-broken) before relying on it.
 
